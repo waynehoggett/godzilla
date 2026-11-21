@@ -2,7 +2,7 @@ const KEY = 'gmo-fan-game-v1';
 
 export class Save {
   constructor() {
-    this.data = { chapter: 0, brawl: {}, ladder: false, finished: false, muted: false };
+    this.data = { chapter: 0, brawl: {}, ladder: false, finished: false, muted: false, lite: false };
     try { Object.assign(this.data, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch { /* storage unavailable */ }
   }
   write() { try { localStorage.setItem(KEY, JSON.stringify(this.data)); } catch { /* ignore */ } }

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Plane } from '../storyScene.js';
 import { Beam } from '../../core/fx.js';
 import { clamp, damp, turnToward } from '../../core/scene.js';
@@ -18,7 +18,7 @@ export class Ch7 extends StoryScene {
     super(game, opts);
     this.hpName = 'Shinden';
     const s = this.scene;
-    this.sky = setupSky(s, 'dawn', { far: 4600, near: 400 });
+    this.sky = setupSky(s, 'dawn', { far: 4600, near: 400 }, game.renderer);
     this.ocean = new Ocean(s, { size: 11000, deep: 0x0d2c44, shallow: 0x3a7a8c, sunCol: 0xffd2a0, sunDir: [0.2, 0.3, -0.9] });
     this.g = makeGodzilla(); this.g.root.scale.setScalar(5); this.g.root.position.set(0, -20, 0); s.add(this.g.root);
     this.gyaw = Math.PI; this.mouth = new V();
@@ -37,7 +37,7 @@ export class Ch7 extends StoryScene {
   }
 
   eject() {
-    this.go('end'); this.ui.prompt(null); this.ui.marker(null); this.ui.objective(''); this.ui.meter(null); this.ui.controls([], '');
+    this.go('end'); this.ui.prompt(null); this.ui.marker(null); this.ui.reticle(null); this.ui.objective(''); this.ui.meter(null); this.ui.controls([], '');
     this.hpName = null; this.ui.bar('L', null);
     this.say('', 'You pull the lever Tachibana gave you.', 3);
     this.audio.whoosh(1.5);
@@ -85,7 +85,7 @@ export class Ch7 extends StoryScene {
       const t = this.pt;
       if (t < this.hitT) { pl.pos.lerpVectors(this.from, this.mouth, t / this.hitT); pl.sync(dt); this.audio.engineSet(1.4, 0.1); }
       else if (!this.boomed) {
-        this.boomed = true; pl.m.root.visible = false; this.audio.engine(false); g.head.visible = false; g.set.charge = 1;
+        this.boomed = true; pl.m.root.visible = false; this.audio.engine(false); g.set.headScale = 0.02; g.set.charge = 1;
         this.ui.flash('#ffffff', 1600, 1); this.audio.boom(2); this.fx.shake(3);
         for (let i = 0; i < 6; i++) this.fx.explosion(_a.copy(this.mouth).add(_b.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 24, (Math.random() - 0.5) * 30)), 5);
         this.audio.music('hope');
@@ -107,7 +107,7 @@ export class Ch7 extends StoryScene {
         g.root.position.y = -20 - k * 70; g.root.rotation.z = k * 0.5; g.set.charge = 1 - k;
         _a.set(g.root.position.x, 30 - k * 40, g.root.position.z);
         this.rays.forEach((r, i) => { if (k >= 0.8) return r.off(); const a = i * 1.26 + this.t * 0.4; r.set(_a, _b.set(_a.x + Math.cos(a) * 220, _a.y + 120 + Math.sin(a * 2 + this.t) * 60, _a.z + Math.sin(a) * 220), 2.2 * (1 - k)); });
-        if (Math.random() < 0.5) this.fx.splash(_b.set((Math.random() - 0.5) * 60, 1, (Math.random() - 0.5) * 60), 4);
+        if (Math.random() < 0.5) this.fx.splash(_b.set((Math.random() - 0.5) * 60, 1, (Math.random() - 0.5) * 60), 2.2);
       }
     }
     g.root.rotation.y = this.gyaw;

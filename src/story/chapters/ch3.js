@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Turret } from '../storyScene.js';
 import { Beam } from '../../core/fx.js';
 import { clamp, damp, turnToward } from '../../core/scene.js';
@@ -16,14 +16,14 @@ export class Ch3 extends StoryScene {
   constructor(game, opts) {
     super(game, opts);
     this.hpName = 'Shinsei Maru';
-    this.sky = setupSky(this.scene, 'day', { top: 0x4a6f98, bot: 0xc2ccd0, fog: 0xb0bcc2, far: 2400 });
+    this.sky = setupSky(this.scene, 'day', { top: 0x4a6f98, bot: 0xc2ccd0, fog: 0xb0bcc2, far: 2400 }, game.renderer);
     this.ocean = new Ocean(this.scene, { amp: 1.1 });
     this.g = makeGodzilla(); this.g.root.scale.setScalar(5); this.scene.add(this.g.root);
     this.gp = new V(0, SURF, -260); this.gyaw = 0; this.close = 10; this.slow = 0; this.boatSpeed = 15;
     this.headPos = new V(); this.minePos = new V();
     this.turret = new Turret(this, makeGun());
     this.turret.add(this.headPos, 10, (p) => { this.slow = Math.min(7, this.slow + 0.55); if (Math.random() < 0.3) this.fx.burst(p, 3, 20, 0.4, 0.8, 0xfff0a0, 0xff7020); });
-    this.mineTarget = this.turret.add(this.minePos, 5, () => this.hitMouthMine()); this.mineTarget.on = false;
+    this.mineTarget = this.turret.add(this.minePos, 8, () => this.hitMouthMine()); this.mineTarget.on = false;
     this.mine = makeMine(1.8); this.mine.visible = false; this.scene.add(this.mine); this.mineState = 'none';
     this.takao = makeWarship(125); this.takao.root.visible = false; this.scene.add(this.takao.root);
     this.beam = new Beam(this.scene);
@@ -58,7 +58,7 @@ export class Ch3 extends StoryScene {
     this.mineTarget.on = false; this.mine.visible = false; this.mineState = 'none';
     this.fx.explosion(this.minePos, 6); this.fx.explosion(_a.copy(this.minePos).add(_b.set(4, 6, 2)), 4); this.fx.splash(this.minePos, 6);
     this.audio.boom(1.6); this.ui.flash('#fff2d0', 500, 0.8); this.fx.shake(2.5);
-    this.g.head.scale.setScalar(0.55); this.g.set.jaw = 0;
+    this.g.set.headScale = 0.5; this.g.set.jaw = 0;
     this.go('sunk'); this.ui.objective('');
     this.say('Mizushima', 'You got it! Right in the mouth!', 3.5);
   }
@@ -102,7 +102,7 @@ export class Ch3 extends StoryScene {
 
     if (ph === 'sunk') {
       this.gp.y = damp(this.gp.y, DEEP, 0.8, dt); this.boatSpeed = damp(this.boatSpeed, 3, 0.5, dt);
-      if (pt > 5 && !this.s1) { this.s1 = true; this.audio.music('dread'); g.head.scale.setScalar(1); this.gp.z = -190; this.go('regen'); }
+      if (pt > 5 && !this.s1) { this.s1 = true; this.audio.music('dread'); g.set.headScale = 1; this.gp.z = -190; this.go('regen'); }
     } else if (ph === 'regen') {
       this.gp.y = damp(this.gp.y, SURF, 1.2, dt); g.set.charge = 0.25 + Math.sin(this.t * 9) * 0.1;
       if (pt > 1.2 && !this.s2) { this.s2 = true; this.audio.roar(1, 1, 2.4); this.fx.splash(_a.set(this.gp.x, 1, this.gp.z), 8); this.say('Noda', 'It\'s healing. The flesh is knitting back together as we watch…', 5); }

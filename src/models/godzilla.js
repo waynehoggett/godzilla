@@ -1,4 +1,7 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { texture, uniform, positionGeometry, smoothstep, vec3, float } from 'three/tsl';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { assets } from '../core/assets.js';
 
 // ---------- shared modelling helpers ----------
 function hash3(x, y, z) { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); }
@@ -23,181 +26,156 @@ export function blobGeo(detail = 2, amt = 0.12, seed = 0) {
 }
 export function part(parent, geo, mat, x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx) {
   const m = new THREE.Mesh(geo, mat);
-  m.position.set(x, y, z); m.scale.set(sx, sy, sz);
+  m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true;
   parent.add(m);
   return m;
 }
 export function pivot(parent, x = 0, y = 0, z = 0) { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; }
 
-const coneGeo = new THREE.ConeGeometry(1, 1, 5);
 
-function finGeometry() {
-  const pts = [[-0.5, 0], [-0.66, 0.32], [-0.4, 0.42], [-0.56, 0.82], [-0.24, 0.76], [-0.16, 1.28], [0, 0.98], [0.1, 1.55], [0.24, 0.92], [0.44, 1.02], [0.36, 0.52], [0.6, 0.4], [0.5, 0]];
-  const s = new THREE.Shape();
-  s.moveTo(pts[0][0], pts[0][1]);
-  for (const p of pts.slice(1)) s.lineTo(p[0], p[1]);
-  const g = new THREE.ExtrudeGeometry(s, { depth: 0.14, bevelEnabled: false });
-  g.translate(0, -0.08, -0.07); g.rotateY(Math.PI / 2); // plate lies in the body's sagittal plane
-  return g;
+// ---------- rig helpers (shared with the other rigged monsters) ----------
+const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _r = new THREE.Quaternion(), _ax = new THREE.Vector3(), _v = new THREE.Vector3();
+export const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
+
+// Rotate a bone by `angle` about an axis given in the model's own space (X left, Y up, Z forward),
+// whatever the bone's local axes happen to be. Call after the mixer and an updateMatrixWorld.
+export function turnBone(bone, rootQ, axis, angle) {
+  if (!bone || !angle) return;
+  _ax.copy(axis).applyQuaternion(rootQ);
+  _r.setFromAxisAngle(_ax, angle);
+  bone.parent.getWorldQuaternion(_pq);
+  _q.copy(_pq).invert().multiply(_r).multiply(_pq);
+  bone.quaternion.premultiply(_q);
 }
-const FIN_GEO = finGeometry();
+export function findBones(root, prefixes) {
+  const out = {};
+  root.traverse((o) => { for (const k in prefixes) if (!out[k] && o.name.startsWith(prefixes[k])) out[k] = o; });
+  return out;
+}
+
+const TAIL = 'A B C D E F G H I J K L M N O P Q R S T U V W X Y Z AA AB AC AD AE AF AG AH AI AJ AK AL'.split(' ');
+const IDLE_FROM = 8.5, IDLE_SPAN = 2.8; // a calm stretch of the clip (it also contains a roar and a stomp)
+let fit = null; // scale and offset that put the model 10 units tall, feet on y=0, facing +Z
 
 /**
- * Procedural Godzilla. Model space: ~10 units tall, feet at y=0, facing +Z.
+ * Godzilla: rigged model (see CREDITS.md). ~10 units tall, feet at y=0, facing +Z.
  * Drive it through `set` and call update(dt).
- *   set.walk 0..1, set.charge 0..1 (fins rise + glow tail->head), set.jaw 0..1,
- *   set.clawL/clawR 0..1, set.whip -1..1 (tail sweep), set.lean radians, set.headPitch radians
+ *   set.walk 0..1, set.charge 0..1 (fins light up from the tail to the neck), set.jaw 0..1,
+ *   set.clawL/clawR/attack 0..1, set.whip -1..1 (tail sweep), set.lean, set.headPitch (radians),
+ *   set.swim 0..1 (leaning forward in water), set.hurt 0..1
+ * o.mecha: chrome Mechagodzilla variant.
  */
 export function makeGodzilla(o = {}) {
   const mecha = !!o.mecha;
-  const skin = mecha
-    ? new THREE.MeshStandardMaterial({ color: 0xb4c0cc, metalness: 0.35, roughness: 0.38, flatShading: true })
-    : new THREE.MeshStandardMaterial({ color: o.color ?? 0x2b2d2c, roughness: 1, flatShading: true });
-  const dark = mecha
-    ? new THREE.MeshStandardMaterial({ color: 0x4a5564, metalness: 0.4, roughness: 0.45, flatShading: true })
-    : new THREE.MeshStandardMaterial({ color: 0x1b1c1c, roughness: 1, flatShading: true });
-  const bone = new THREE.MeshStandardMaterial({ color: mecha ? 0xd8dde4 : 0xcfc8b4, roughness: 0.7, flatShading: true });
-  const glowCol = new THREE.Color(mecha ? 0xff5030 : 0x49b6ff);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: mecha ? 0xffd040 : 0xffb347 });
-  const B = (d = 2, seed = 0) => blobGeo(mecha ? 1 : d, mecha ? 0 : 0.13, seed);
-
-  const root = new THREE.Group();
-  const body = pivot(root, 0, 4.3, 0);
-  part(body, B(2, 1), skin, 0, 0, -0.1, 2.15, 2.2, 2.4);         // hips
-  part(body, B(2, 2), skin, 0, 1.7, 0.25, 1.95, 2.2, 2.0);        // belly
-  part(body, B(2, 3), skin, 0, 3.05, 0.6, 1.7, 1.6, 1.6);         // chest
-  part(body, B(1, 4), dark, 0, 1.3, 1.55, 1.2, 1.9, 0.7);         // underbelly plates
-  if (mecha) {
-    part(body, new THREE.BoxGeometry(1, 1, 1), dark, 1.7, 3.6, 0.5, 1.3, 1.0, 1.5);
-    part(body, new THREE.BoxGeometry(1, 1, 1), dark, -1.7, 3.6, 0.5, 1.3, 1.0, 1.5);
-    part(body, B(1), new THREE.MeshBasicMaterial({ color: 0xff4020 }), 0, 2.7, 1.95, 0.45, 0.45, 0.2);
+  const src = assets.godzilla;
+  const root = new THREE.Group(), tilt = new THREE.Group(), holder = new THREE.Group();
+  const model = cloneSkinned(src.scene);
+  holder.add(model); tilt.add(holder); root.add(tilt);
+  const mixer = new THREE.AnimationMixer(model);
+  mixer.clipAction(src.animations[0]).play();
+  mixer.setTime(IDLE_FROM); model.updateMatrixWorld(true);
+  if (!fit) {
+    const box = new THREE.Box3().setFromObject(model, true), k = 10 / (box.max.y - box.min.y);
+    const hips = findBones(model, { l: 'l_legJA', r: 'r_legJA' });
+    const c = hips.l.getWorldPosition(new THREE.Vector3()).add(hips.r.getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5);
+    fit = { k, x: -c.x * k, y: -box.min.y * k, z: -c.z * k, hipY: (c.y - box.min.y) * k };
   }
+  holder.scale.setScalar(fit.k); holder.position.set(fit.x, fit.y, fit.z);
+  // pivot the swim/hurt tilt at the hips
+  tilt.position.y = fit.hipY; holder.position.y -= fit.hipY;
 
-  // neck + head
-  const neck = pivot(body, 0, 3.8, 0.75); neck.rotation.x = 0.28;
-  part(neck, B(2, 5), skin, 0, 0.55, 0, 1.05, 1.35, 1.05);
-  const head = pivot(neck, 0, 1.5, 0.25); head.rotation.x = -0.12;
-  part(head, B(2, 6), skin, 0, 0.05, 0.05, 0.78, 0.68, 1.0);
-  part(head, B(1, 7), skin, 0, -0.02, 0.95, 0.6, 0.45, 0.75);    // snout
-  part(head, B(1, 8), dark, 0.36, 0.42, 0.4, 0.28, 0.2, 0.5);    // brows
-  part(head, B(1, 9), dark, -0.36, 0.42, 0.4, 0.28, 0.2, 0.5);
-  const eyeG = new THREE.SphereGeometry(1, 8, 6);
-  part(head, eyeG, eyeMat, 0.5, 0.27, 0.62, 0.085);
-  part(head, eyeG, eyeMat, -0.5, 0.27, 0.62, 0.085);
-  const jaw = pivot(head, 0, -0.3, 0.15);
-  part(jaw, B(1, 10), skin, 0, -0.1, 0.7, 0.55, 0.26, 0.95);
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 5 - 0.5) * 1.6, x = Math.sin(a) * 0.46, z = 0.95 + Math.cos(a) * 0.6;
-    part(jaw, coneGeo, bone, x, 0.2, z, 0.07, 0.24, 0.07);
-    const up = part(head, coneGeo, bone, x, -0.3, z + 0.1, 0.07, 0.24, 0.07); up.rotation.x = Math.PI;
-  }
-  const mouthGlow = part(head, eyeG, new THREE.MeshBasicMaterial({ color: glowCol, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }), 0, -0.3, 1.0, 0.5);
-  const mouth = pivot(head, 0, -0.3, 1.7);
-  const mouthLight = new THREE.PointLight(glowCol, 0, 0, 1.5); mouth.add(mouthLight);
+  const B = findBones(model, {
+    hips: 'spineJA', s1: 'spineJB', s2: 'spineJC', s3: 'spineJD', s4: 'spineJE', s5: 'spineJF',
+    n1: 'neckJA', n2: 'neckJB', n3: 'neckJC', head: 'headJA', jaw: 'jawJA',
+    armL: 'l_armJA_', foreL: 'l_armJB_', armR: 'r_armJA_', foreR: 'r_armJB_',
+    legL: 'l_legJA', shinL: 'l_legJB', footL: 'l_footJA', legR: 'r_legJA', shinR: 'r_legJB', footR: 'r_footJA',
+  });
+  const tail = TAIL.map((n) => findBones(model, { b: `tailJ${n}_JNT` }).b).filter(Boolean);
 
-  // arms
-  const arms = [];
-  for (const s of [1, -1]) {
-    const sh = pivot(body, 1.62 * s, 2.95, 0.95);
-    part(sh, B(1, 11), skin, 0, -0.6, 0.15, 0.52, 0.85, 0.55);
-    const fore = pivot(sh, 0, -1.2, 0.3); fore.rotation.x = -0.9;
-    part(fore, B(1, 12), skin, 0, -0.55, 0, 0.42, 0.75, 0.42);
-    for (let i = 0; i < 4; i++) { const c = part(fore, coneGeo, bone, (i - 1.5) * 0.17, -1.35, 0.05, 0.08, 0.42, 0.08); c.rotation.x = Math.PI; }
-    arms.push({ sh, fore, s });
-  }
-
-  // legs (children of root so the body can bob above them)
-  const legs = [];
-  for (const s of [1, -1]) {
-    const hip = pivot(root, 1.45 * s, 4.25, -0.1);
-    part(hip, B(2, 13), skin, 0, -1.2, 0.25, 1.2, 1.95, 1.55);
-    const knee = pivot(hip, 0, -2.3, 0.45);
-    part(knee, B(1, 14), skin, 0, -0.8, -0.2, 0.82, 1.2, 0.9);
-    const foot = pivot(knee, 0, -1.6, 0);
-    part(foot, B(1, 15), skin, 0, 0, 0.45, 0.95, 0.4, 1.5);
-    for (let i = -1; i <= 1; i++) { const c = part(foot, coneGeo, bone, i * 0.5, -0.05, 1.8, 0.16, 0.6, 0.16); c.rotation.x = Math.PI / 2; }
-    if (mecha) part(knee, new THREE.BoxGeometry(1, 1, 1), dark, 0, 0, 0.5, 1.2, 0.9, 0.8);
-    legs.push({ hip, knee, foot, s });
-  }
-
-  // dorsal fins: order 0 (tail tip) -> 1 (neck); they light up in that order
-  const fins = [];
-  const addFin = (parent, x, y, z, sc, tiltX, tiltZ, order) => {
-    const mat = new THREE.MeshStandardMaterial({ color: mecha ? 0xb8c2cc : 0x232526, roughness: mecha ? 0.35 : 0.9, metalness: mecha ? 0.35 : 0, flatShading: true, emissive: glowCol, emissiveIntensity: 0 });
-    const f = new THREE.Mesh(FIN_GEO, mat);
-    f.position.set(x, y, z); f.rotation.set(tiltX, 0, tiltZ); f.scale.setScalar(sc);
-    parent.add(f);
-    fins.push({ f, mat, order, base: sc, by: y, bz: z, nx: Math.sin(tiltX), ny: Math.cos(tiltX) });
-  };
-  const spine = [[4.75, 0.05, -0.2, 0.7], [4.05, -0.75, -0.7, 1.25], [3.0, -1.5, -0.95, 1.9], [1.85, -1.95, -1.15, 2.3], [0.7, -2.2, -1.3, 1.9], [-0.3, -2.25, -1.45, 1.4]];
-  spine.forEach(([y, z, tilt, sc], i) => {
-    const order = 1 - (i / (spine.length - 1)) * 0.5;
-    addFin(body, 0, y, z, sc, tilt, 0, order);
-    if (sc > 1) { addFin(body, 0.78, y - 0.15, z + 0.35, sc * 0.55, tilt, -0.4, order); addFin(body, -0.78, y - 0.15, z + 0.35, sc * 0.55, tilt, 0.4, order); }
+  // --- material: the model's own textures, with the fin glow under game control ---
+  const U = { charge: uniform(0), hurt: uniform(0), flicker: uniform(1) };
+  let skin = null;
+  model.traverse((m) => {
+    if (!m.isMesh) return;
+    const sm = m.material, mat = (skin = new THREE.MeshPhysicalNodeMaterial());
+    for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'clearcoatNormalMap']) if (sm[k]) mat[k] = sm[k];
+    mat.roughness = sm.roughness; mat.metalness = sm.metalness; mat.clearcoat = 0.35; mat.clearcoatRoughness = 0.45; mat.side = THREE.FrontSide;
+    if (mecha) { mat.map = null; mat.color.set(0xc6ced6); mat.metalness = 1; mat.metalnessMap = null; mat.roughnessMap = null; mat.roughness = 0.24; mat.clearcoat = 0; }
+    // glow front sweeps from the tail tip (s=0) up the back to the neck (s~0.9), in bind-pose space
+    m.geometry.computeBoundingBox();
+    const bb = m.geometry.boundingBox, pos = m.geometry.attributes.position, den = pos.normalized ? (pos.array instanceof Int16Array ? 32767 : pos.array instanceof Uint16Array ? 65535 : pos.array instanceof Int8Array ? 127 : 255) : 1;
+    // (the compressed mesh stores positions as normalised integers, so measure the range rather than assume it)
+    const z0 = bb.min.z, zr = bb.max.z - bb.min.z, y0 = bb.min.y, yr = bb.max.y - bb.min.y; void den;
+    const s = positionGeometry.z.sub(z0).div(zr).mul(0.7).add(positionGeometry.y.sub(y0).div(yr).mul(0.3));
+    const lit = smoothstep(U.charge.mul(1.15), U.charge.mul(1.15).sub(0.12), s);
+    const glow = float(mecha ? 2.5 : 0.06).add(lit.mul(mecha ? 14 : 34).mul(U.flicker));
+    const tint = mecha ? vec3(1.0, 0.22, 0.1) : vec3(0.55, 0.85, 1.0);
+    mat.emissiveNode = texture(sm.emissiveMap).rgb.dot(vec3(0.33)).mul(tint).mul(glow).add(vec3(1, 0.25, 0.15).mul(U.hurt));
+    m.material = mat; m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
   });
 
-  // tail chain
-  const tail = [];
-  const bend = [-0.3, -0.3, -0.2, 0.3, 0.3, 0.2, 0, 0.05, 0.05, 0.05, 0.05];
-  let prev = pivot(body, 0, -0.4, -1.5), r = 1.55;
-  for (let i = 0; i < bend.length; i++) {
-    const seg = i === 0 ? prev : pivot(prev, 0, 0, -1.6 * (0.94 ** i) * 0.92);
-    seg.rotation.x = bend[i];
-    const len = 1.6 * (0.94 ** i);
-    part(seg, B(1, 20 + i), skin, 0, 0, -len / 2, r, r, len * 0.72);
-    if (i < 8) addFin(seg, 0, r * 0.75, -len / 2, Math.max(0.3, 1.25 - i * 0.14), -0.3, 0, 0.45 * (1 - i / 8));
-    tail.push({ seg, base: bend[i] });
-    prev = seg; r *= 0.83;
-  }
+  const mouthLight = new THREE.PointLight(mecha ? 0xff5030 : 0x49b6ff, 0, 0, 1.6);
+  root.add(mouthLight);
 
-  const set = { walk: 0, charge: 0, jaw: 0, clawL: 0, clawR: 0, whip: 0, lean: 0, headPitch: 0, hurt: 0, swim: 0, attack: 0, flap: 0, fold: 0 };
-  let phase = 0, t = 0;
-  const _v = new THREE.Vector3();
+  const set = { walk: 0, charge: 0, jaw: 0, clawL: 0, clawR: 0, whip: 0, lean: 0, headPitch: 0, hurt: 0, swim: 0, attack: 0, flap: 0, fold: 0, headScale: 1 };
+  let phase = 0, t = Math.random() * 5, idle = Math.random() * IDLE_SPAN;
+  const rootQ = new THREE.Quaternion(), dur = src.animations[0].duration;
 
   function update(dt) {
-    t += dt; phase += dt * (1.6 + set.walk * 2.2) * (set.walk > 0.02 ? 1 : 0);
-    const w = set.walk, sw = Math.sin(phase), breathe = Math.sin(t * 1.3) * 0.04;
-    body.position.y = 4.3 + Math.abs(Math.cos(phase)) * 0.18 * w + breathe;
-    body.rotation.x = set.lean + set.swim * 0.95 + w * 0.06 - set.hurt * 0.25;
-    body.rotation.z = sw * 0.045 * w;
-    body.rotation.y = set.whip * -0.5;
-    neck.rotation.x = 0.28 + set.headPitch - set.swim * 0.8 + Math.sin(t * 0.9) * 0.03;
-    head.rotation.x = -0.12 - set.jaw * 0.18;
-    jaw.rotation.x = set.jaw * 0.62;
-    for (const L of legs) {
-      const a = Math.sin(phase + (L.s > 0 ? 0 : Math.PI));
-      L.hip.rotation.x = -a * 0.42 * w - set.swim * 0.6;
-      L.knee.rotation.x = Math.max(0, a) * 0.6 * w + set.swim * 0.3;
-      L.foot.rotation.x = -Math.max(0, a) * 0.2 * w;
+    t += dt; idle += dt * 0.6;
+    const w = set.walk;
+    phase += dt * (1.5 + w * 2.0) * (w > 0.02 ? 1 : 0);
+    // base pose: ping-pong through the calm part of the clip
+    const pp = idle % (IDLE_SPAN * 2), tt = IDLE_FROM + (pp < IDLE_SPAN ? pp : IDLE_SPAN * 2 - pp);
+    mixer.setTime(tt % dur);
+    tilt.rotation.x = set.swim * 0.85 - set.hurt * 0.18;
+    tilt.position.y = fit.hipY + Math.abs(Math.cos(phase)) * 0.16 * w;
+    tilt.rotation.z = Math.sin(phase) * 0.035 * w;
+    root.updateMatrixWorld(true);
+    root.getWorldQuaternion(rootQ);
+    const X = AX.x, Y = AX.y;
+    // spine: lean, tail-sweep twist
+    const lean = set.lean + w * 0.05;
+    for (const b of [B.s1, B.s2, B.s3, B.s4]) { turnBone(b, rootQ, X, lean / 4); turnBone(b, rootQ, Y, set.whip * -0.14); }
+    // neck + head
+    const pitch = set.headPitch - set.swim * 0.7 - set.jaw * 0.12;
+    for (const b of [B.n1, B.n2, B.n3, B.head]) turnBone(b, rootQ, X, pitch / 4);
+    turnBone(B.jaw, rootQ, X, set.jaw * 0.55);
+    if (set.headScale !== 1) B.head.scale.multiplyScalar(set.headScale);
+    // legs
+    for (const [leg, shin, foot, off] of [[B.legL, B.shinL, B.footL, 0], [B.legR, B.shinR, B.footR, Math.PI]]) {
+      const a = Math.sin(phase + off);
+      turnBone(leg, rootQ, X, -a * 0.4 * w - set.swim * 0.5);
+      turnBone(shin, rootQ, X, Math.max(0, a) * 0.65 * w + set.swim * 0.3);
+      turnBone(foot, rootQ, X, -Math.max(0, a) * 0.25 * w);
     }
-    for (const A of arms) {
-      const c = Math.max(A.s > 0 ? set.clawR : set.clawL, set.attack);
-      A.sh.rotation.x = -c * 1.75 + sw * 0.1 * w * A.s;
-      A.sh.rotation.z = -A.s * c * 0.35;
-      A.fore.rotation.x = -0.9 + c * 0.7;
+    // arms
+    for (const [arm, fore, c, sgn] of [[B.armL, B.foreL, Math.max(set.clawL, set.attack), 1], [B.armR, B.foreR, Math.max(set.clawR, set.attack), -1]]) {
+      turnBone(arm, rootQ, X, -c * 1.25 + Math.sin(phase) * 0.08 * w * sgn);
+      turnBone(arm, rootQ, Y, -sgn * c * 0.5);
+      turnBone(fore, rootQ, X, -c * 0.5);
     }
-    tail.forEach((s, i) => {
-      s.seg.rotation.y = Math.sin(t * 1.1 - i * 0.55) * (0.06 + w * 0.05) + set.whip * 0.34;
-      s.seg.rotation.x = s.base + (i > 3 ? Math.sin(t * 0.8 - i * 0.4) * 0.03 : 0);
-    });
-    // fins rise and glow in sequence from the tail to the neck
-    const ch = set.charge;
-    for (const F of fins) {
-      const g = Math.min(1, Math.max(0, (ch * 1.25 - F.order * 0.9) / 0.3));
-      F.mat.emissiveIntensity = g * (1.6 + Math.sin(t * 22 + F.order * 9) * 0.35);
-      F.f.scale.setScalar(F.base * (1 + g * 0.22));
-      F.f.position.y = F.by + F.ny * g * 0.28 * F.base; F.f.position.z = F.bz + F.nx * g * 0.28 * F.base;
-    }
-    const mg = Math.max(0, ch - 0.8) * 5;
-    mouthGlow.material.opacity = mg * 0.9; mouthLight.intensity = mg * 60 * (o.lightScale ?? 1);
+    // tail: slow sway plus the whip
+    const n = tail.length;
+    for (let i = 0; i < n; i++) turnBone(tail[i], rootQ, Y, Math.sin(t * 1.1 - i * 0.22) * (0.012 + w * 0.012) + (set.whip * 2.4) / n + (i < 6 ? set.whip * 0.05 : 0));
+    // glow
+    U.charge.value = set.charge; U.hurt.value = Math.max(0, hurtFlash); U.flicker.value = 1 + Math.sin(t * 23) * 0.12;
+    const mg = Math.max(0, set.charge - 0.8) * 5;
+    mouthLight.intensity = mg * 70 * (o.lightScale ?? 1);
+    if (mg > 0) { B.jaw.getWorldPosition(_v); root.worldToLocal(_v); mouthLight.position.copy(_v); }
   }
-
+  let hurtFlash = 0;
+  const fwd = new THREE.Vector3();
+  const mouthWorld = (v = new THREE.Vector3()) => {
+    B.head.getWorldPosition(v);
+    const sc = root.getWorldScale(_v).x; root.getWorldQuaternion(_q);
+    return v.add(fwd.set(0, -0.55, 1.5).multiplyScalar(sc).applyQuaternion(_q));
+  };
   return {
-    root, set, update, mecha,
-    height: 10, radius: 2.6,
-    mouthWorld: (v = _v) => mouth.getWorldPosition(v),
-    headWorld: (v = _v) => head.getWorldPosition(v),
-    head, jawPivot: jaw, body, fins,
-    flash(k) { skin.emissive.setRGB(k, k * 0.25, k * 0.15); },
+    root, set, update, mecha, height: 10, radius: 2.6,
+    mouthWorld, mouths: () => [mouthWorld(new THREE.Vector3())],
+    headWorld: (v = new THREE.Vector3()) => B.head.getWorldPosition(v),
+    head: B.head, bones: B, material: skin,
+    flash(k) { hurtFlash = k * 0.6; },
   };
 }

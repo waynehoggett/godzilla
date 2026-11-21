@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Plane } from '../storyScene.js';
 import { Beam } from '../../core/fx.js';
 import { clamp, damp } from '../../core/scene.js';
@@ -17,9 +17,9 @@ export class Ch6 extends StoryScene {
     super(game, opts);
     this.hpName = 'Shinden';
     const s = this.scene;
-    this.sky = setupSky(s, 'dawn', { far: 4600, near: 400 });
+    this.sky = setupSky(s, 'dawn', { far: 4600, near: 400 }, game.renderer);
     this.ocean = new Ocean(s, { size: 11000, deep: 0x0d2c44, shallow: 0x3a7a8c, sunCol: 0xffd2a0, sunDir: [0.2, 0.3, -0.9] });
-    this.plane = new Plane(this, makeShinden(), 0, 150, -760, 0);
+    this.plane = new Plane(this, makeShinden(), 0, 85, -760, 0);
     this.plane.bound = 1500;
     this.H = new Hunter(this, this.plane, 0, 0, Math.PI); this.H.pos.y = SURF; this.H.rayEvery = 13; this.H.aggro = 0.8;
     this.ships = ['Yukikaze', 'Hibiki'].map((name, i) => { const m = makeWarship(70); s.add(m.root); return { m, name, a: i * Math.PI, pos: new V() }; });
@@ -55,7 +55,7 @@ export class Ch6 extends StoryScene {
 
   startSink() {
     this.go('sink'); this.cp = 1; this.wrap = 1; this.H.cancelRay(); this.H.aggro = 0; this.shipBeam.off();
-    this.ui.objective(''); this.ui.bar('R', null); this.ui.controls([], '');
+    this.ui.objective(''); this.ui.bar('R', null); this.ui.controls([], ''); this.ui.reticle(null);
     this.plane.auto = () => ({ x: 0.3, y: clamp((170 - this.plane.pos.y) * 0.02, -1, 1) });
     this.audio.music('dread');
     const say = (t, who, text, d = 4) => this.after(t, () => this.say(who, text, d));

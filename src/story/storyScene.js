@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { GameScene, clamp, damp, angleTo } from '../core/scene.js';
 
 const V = THREE.Vector3;
@@ -151,18 +151,22 @@ export class Plane {
   }
   // Fire the nose cannons; targets: [{ pos, r, onHit }] hit when inside the aim cone.
   fire(dt, input, targets, range = 650) {
-    this.cool -= dt;
-    if (!input.held('a') || this.cool > 0) return false;
-    this.cool = 0.09;
-    const S = this.S, f = this.fwd(_a);
-    S.audio.gun();
-    S.fx.spawn(_b.copy(this.pos).addScaledVector(f, 6), _c.copy(f).multiplyScalar(this.speed + 520), 0.5, 0.5, 0xfff0a0, 0xffa030);
+    const S = this.S, f = this.fwd(new V());
+    let best = null, bestAlong = 0;
     for (const t of targets) {
       _b.subVectors(t.pos, this.pos); const along = _b.dot(f);
       if (along < 0 || along > range) continue;
       const off = _c.copy(this.pos).addScaledVector(f, along).distanceTo(t.pos);
-      if (off < t.r + along * 0.06) { t.onHit(_c.copy(this.pos).addScaledVector(f, along).clone()); return true; }
+      if (off < t.r + along * 0.13) { best = t; bestAlong = along; break; }
     }
+    const sight = S.project(_b.copy(this.pos).addScaledVector(f, 400));
+    if (sight) S.ui.reticle(sight.x, sight.y, !!best); else S.ui.reticle(null);
+    this.cool -= dt;
+    if (!input.held('a') || this.cool > 0) return false;
+    this.cool = 0.09;
+    S.audio.gun();
+    S.fx.spawn(_b.copy(this.pos).addScaledVector(f, 6), _c.copy(f).multiplyScalar(this.speed + 520), 0.5, 0.5, 0xfff0a0, 0xffa030);
+    if (best) best.onHit(best.pos.clone().addScaledVector(f, -best.r * 0.8));
     return true;
   }
 }

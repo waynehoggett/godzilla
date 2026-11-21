@@ -1,5 +1,5 @@
 import { makeGodzilla } from '../models/godzilla.js';
-import { makeRodan, makeMothra, makeGhidorah } from '../models/rivals.js';
+import { makeRodan, makeMothra, makeGhidorah, makeKong } from '../models/rivals.js';
 
 // Attack timings are in seconds: wind (telegraph) -> act (dangerous) -> rec (open to punishment).
 export const RIVALS = {
@@ -19,6 +19,16 @@ export const RIVALS = {
       { type: 'zone', id: 'scales', min: 0, max: 240, cd: 7, wind: 0.9, act: 0.3, rec: 0.6, dps: 9, r: 40, dur: 5.5 },
       { type: 'dive', id: 'ram', min: 60, max: 420, cd: 6, wind: 0.95, act: 0.5, rec: 1.7, dmg: 17, r: 24, up: 30, low: 6, kb: 65 },
       { type: 'beam', id: 'beam', min: 70, max: 360, cd: 8, wind: 1.0, act: 0.9, rec: 0.7, dps: 30, n: 1 },
+    ],
+  },
+  kong: {
+    name: 'King Kong', tag: 'The eighth wonder of the world', make: makeKong, scale: 5, hp: 400, speed: 30, flying: false, radius: 13, range: 62,
+    pitch: 0.7, arena: 'island', beamColor: 0xffffff, armor: 11,
+    attacks: [
+      { type: 'melee', id: 'punch', min: 0, max: 56, cd: 1.8, wind: 0.42, act: 0.2, rec: 0.8, dmg: 15, r: 24 },
+      { type: 'dive', id: 'leap', min: 70, max: 330, cd: 6, wind: 0.75, act: 0.55, rec: 1.3, dmg: 22, r: 26, up: 0, low: 0, kb: 70, arc: 48 },
+      { type: 'volley', id: 'boulders', min: 90, max: 460, cd: 8, wind: 0.76, act: 0.3, rec: 1.0, dmg: 14, r: 15, n: 3, fly: 1.25, rock: true },
+      { type: 'gust', id: 'roar', min: 0, max: 140, cd: 11, wind: 0.9, act: 0.3, rec: 1.0, dmg: 6, r: 150, kb: 85 },
     ],
   },
   mecha: {
@@ -43,7 +53,7 @@ export const RIVALS = {
   },
 };
 
-export const LADDER = ['rodan', 'mothra', 'mecha', 'ghidorah'];
+export const LADDER = ['rodan', 'mothra', 'kong', 'mecha', 'ghidorah'];
 export const ARENAS = {
   city: { name: 'Ginza by night' },
   bay: { name: 'Sagami Bay' },

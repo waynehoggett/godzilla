@@ -1,32 +1,32 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Walker } from '../storyScene.js';
 import { Beam } from '../../core/fx.js';
 import { clamp, damp } from '../../core/scene.js';
 import { setupSky, ground } from '../../world/sky.js';
-import { City } from '../../world/city.js';
+import { streetCity } from '../../world/city.js';
 import { beacon } from '../../world/props.js';
 import { makeGodzilla } from '../../models/godzilla.js';
 import { makeKoichi, makeNoriko, makeCivilian } from '../../models/people.js';
 
 const V = THREE.Vector3;
 const _a = new V(), _b = new V();
-const NORIKO_Z = 340, SAFE_Z = 225, CHARGE = 18;
+const NORIKO_Z = 340, SAFE_Z = 225, CHARGE = 20;
 
 // Ginza. Run up the street to Noriko, then get her out before the heat ray.
 export class Ch4 extends StoryScene {
   constructor(game, opts) {
     super(game, opts);
     const s = this.scene;
-    this.sky = setupSky(s, 'ash', { far: 900 });
-    ground(s, 0x3b3a37, 1500);
+    this.sky = setupSky(s, 'ash', { far: 900, shadow: 110 }, game.renderer);
+    ground(s, 0x3b3a37, 1500, 0, { roughness: 0.85 });
     const lots = [];
     for (let z = -60; z <= 560; z += 30) for (const side of [1, -1]) {
       const w1 = 18 + Math.random() * 8;
-      lots.push({ x: side * (13 + w1 / 2), z, w: w1, d: 24 + Math.random() * 4, h: 9 + Math.random() * 16 });
+      lots.push({ x: side * (13 + w1 / 2), z, w: w1, d: 24 + Math.random() * 4, h: 10 + Math.random() * 15 });
       const w2 = 20 + Math.random() * 10;
-      lots.push({ x: side * (48 + w2 / 2), z: z + 6, w: w2, d: 26, h: 10 + Math.random() * 22 });
+      lots.push({ x: side * (48 + w2 / 2), z: z + 6, w: w2, d: 26, h: 12 + Math.random() * 22 });
     }
-    this.city = new City(s, lots, false);
+    this.city = streetCity(s, lots);
     const rail = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 640), new THREE.MeshStandardMaterial({ color: 0x55524c, roughness: 1 })); rail.position.set(0, 0.06, 250); s.add(rail);
 
     this.g = makeGodzilla(); this.g.root.scale.setScalar(5); s.add(this.g.root);
@@ -79,8 +79,8 @@ export class Ch4 extends StoryScene {
       this.say('', 'Noriko shoves you into the gap between two buildings.', 4);
       this.noriko.root.visible = false; this.w.p.root.visible = false;
       this.go('cloud');
-      const mat = new THREE.MeshStandardMaterial({ color: 0x5a4a40, roughness: 1, flatShading: true, emissive: 0x802a10, emissiveIntensity: 0.5 });
-      this.cloud = new THREE.Group(); this.cloud.position.set(520, 0, 240);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x5a4a40, roughness: 1, flatShading: true, emissive: 0xa03a12, emissiveIntensity: 0.9, fog: false });
+      this.cloud = new THREE.Group(); this.cloud.position.set(430, 0, 240);
       const geo = new THREE.IcosahedronGeometry(1, 1);
       for (const [y, r] of [[40, 34], [90, 26], [140, 28], [185, 70], [210, 95]]) { const m = new THREE.Mesh(geo, mat); m.position.y = y; m.scale.set(r, r * 0.7, r); this.cloud.add(m); }
       this.cloud.scale.setScalar(0.3); this.scene.add(this.cloud);
@@ -115,11 +115,11 @@ export class Ch4 extends StoryScene {
       if (this.pt >= CHARGE) this.blast();
     } else if (ph === 'blast') {
       G.speed = 0;
-      this.beam.set(g.mouthWorld(_a).clone(), _b.set(520, 30, 240), 7); this.fx.shake(1.5);
+      this.beam.set(g.mouthWorld(_a).clone(), _b.set(430, 30, 240), 7); this.fx.shake(1.5);
     } else if (ph === 'cloud') {
       this.cloud.scale.setScalar(Math.min(1.6, this.cloud.scale.x + dt * 0.14));
-      this.camera.position.lerp(_a.set(w.pos.x, 3, w.pos.z), 1 - Math.exp(-2 * dt));
-      this.camera.lookAt(_b.set(520, 120 * this.cloud.scale.x, 240));
+      this.camera.position.lerp(_a.set(w.pos.x, 46, w.pos.z), 1 - Math.exp(-0.7 * dt));
+      this.camera.lookAt(_b.set(430, 110 * this.cloud.scale.x, 240));
       for (let i = 0; i < 4; i++) this.fx.spawn(_a.set(this.camera.position.x + (Math.random() - 0.3) * 60, 30 + Math.random() * 10, this.camera.position.z + (Math.random() - 0.5) * 60), _b.set(0, -45, 0), 0.9, 0.22, 0x101010, 0x101010);
     }
 
@@ -171,6 +171,7 @@ export class Ch4 extends StoryScene {
       if (G.stepT <= 0) { G.stepT = 0.9; const k = clamp(1 - Math.hypot(G.pos.x - w.pos.x, G.pos.z - w.pos.z) / 320, 0.15, 1); this.audio.step(0.8 * k); this.fx.shake(1.1 * k); this.city.smash(G.pos.x, G.pos.z, 22, this.fx, null); }
     }
     this.city.update(dt);
+    this.focus.copy(w.pos);
     this.beacon.material.opacity = 0.3 + Math.sin(this.t * 4) * 0.1;
     if (ph === 'find') this.ui.meter('Stamina', w.stamina, '#e9c46a');
   }

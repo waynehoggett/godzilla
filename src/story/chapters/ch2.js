@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Turret } from '../storyScene.js';
 import { setupSky } from '../../world/sky.js';
 import { Ocean } from '../../world/ocean.js';
@@ -13,7 +13,7 @@ export class Ch2 extends StoryScene {
   constructor(game, opts) {
     super(game, opts);
     this.hpName = 'Shinsei Maru';
-    this.sky = setupSky(this.scene, 'day');
+    this.sky = setupSky(this.scene, 'day', {}, game.renderer);
     this.ocean = new Ocean(this.scene, { amp: 0.8 });
     this.boat = makeShinsei(); this.scene.add(this.boat.root);
     this.turret = new Turret(this, makeGun());

@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _c = new THREE.Color();
 const _up = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
@@ -8,10 +8,11 @@ export class Beam {
   constructor(scene, color = 0x4db8ff, core = 0xeaf6ff) {
     this.g = new THREE.Group();
     const geo = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
-    this.outer = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-    this.inner = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: core, fog: false }));
+    const hot = (c, k) => new THREE.Color(c).multiplyScalar(k);
+    this.outer = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: hot(color, 2.2), transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    this.inner = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: hot(core, 5), fog: false }));
     this.inner.scale.set(0.4, 1, 0.4);
-    this.tip = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: core, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    this.tip = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshBasicMaterial({ color: hot(core, 4), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     this.g.add(this.outer, this.inner);
     this.g.visible = this.tip.visible = false;
     this.g.frustumCulled = false;
@@ -32,7 +33,7 @@ export class Beam {
 
 export class FX {
   constructor(scene, cap = 900) {
-    this.scene = scene; this.cap = cap; this.shakeAmt = 0; this.items = []; this.cursor = 0;
+    this.scene = scene; this.cap = cap; this.shakeAmt = 0; this.items = []; this.cursor = 0; this.hdr = 1;
     this.mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), cap);
     this.mesh.frustumCulled = false;
     this.p = [];
@@ -54,6 +55,7 @@ export class FX {
     const p = this.p[this.cursor]; this.cursor = (this.cursor + 1) % this.cap;
     p.alive = true; p.pos.copy(pos); p.vel.copy(vel); p.life = 0; p.max = life; p.size = size; p.grav = grav; p.grow = grow; p.drag = drag;
     p.c0.set(c0); p.c1.set(c1 ?? c0);
+    if (this.hdr !== 1) p.c0.multiplyScalar(this.hdr);
     return p;
   }
   burst(pos, n, speed, life, size, c0, c1, o = {}) {
@@ -64,7 +66,9 @@ export class FX {
     }
   }
   explosion(pos, s = 1) {
+    this.hdr = 4;
     this.burst(pos, 26, 22 * s, 0.9, 1.5 * s, 0xfff2a0, 0xd4380d, { up: 0.5, grow: 1.6, drag: 1.5, spread: 2 * s });
+    this.hdr = 1;
     this.burst(pos, 16, 12 * s, 2.2, 2.2 * s, 0x4a4038, 0x15130f, { up: 0.9, grow: 1.2, drag: 0.8, spread: 3 * s });
     this.burst(pos, 12, 34 * s, 1.4, 0.5 * s, 0xffc060, 0x402010, { up: 0.8, grav: 30 });
     this.flash(pos, s);
@@ -72,7 +76,7 @@ export class FX {
   }
   flash(pos, s = 1, color = 0xffaa55) {
     this.light.position.copy(pos); this.light.color.set(color); this.light.intensity = 900 * s * s;
-    const m = new THREE.Mesh(this.sphereGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    const m = new THREE.Mesh(this.sphereGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(3), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     m.position.copy(pos); this.scene.add(m);
     this.items.push({ m, t: 0, dur: 0.35, tick: (it, k) => { m.scale.setScalar(s * (2 + k * 9)); m.material.opacity = 0.9 * (1 - k); } });
   }

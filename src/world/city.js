@@ -1,73 +1,27 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { uniform } from 'three/tsl';
+import { CityGenerator, createRoadMaterial } from 'three/addons/generators/CityGenerator.js';
+import { SkyscraperGenerator, createSkyscraperMaterial } from 'three/addons/generators/city/SkyscraperGenerator.js';
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
-const TINTS = [0xb8a98e, 0x9c8f7c, 0xc9bda6, 0x8a7a68, 0xa39a8e, 0x7d766c, 0xb59b7a, 0x6f6a64];
+const _p = new THREE.Vector3();
 
-function windowTextures(night) {
-  const mk = (fn) => { const c = document.createElement('canvas'); c.width = c.height = 128; fn(c.getContext('2d')); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
-  const cells = [];
-  for (let y = 0; y < 6; y++) for (let x = 0; x < 4; x++) cells.push([x, y, Math.random()]);
-  const map = mk((g) => {
-    g.fillStyle = '#fff'; g.fillRect(0, 0, 128, 128);
-    g.fillStyle = 'rgba(0,0,0,.12)'; for (let y = 0; y < 6; y++) g.fillRect(0, y * 21.3, 128, 2);
-    for (const [x, y] of cells) { g.fillStyle = night ? '#1b1d22' : '#3b4650'; g.fillRect(8 + x * 30, 5 + y * 21.3, 18, 12); }
-  });
-  const emis = mk((g) => {
-    g.fillStyle = '#000'; g.fillRect(0, 0, 128, 128);
-    if (!night) return;
-    for (const [x, y, r] of cells) if (r > 0.62) { g.fillStyle = r > 0.9 ? '#ffe9b0' : '#d9a550'; g.fillRect(8 + x * 30, 5 + y * 21.3, 18, 12); }
-  });
-  return { map, emis };
-}
-
-// Rectangular lots on a street grid. skip(x, z) lets a scene carve out avenues or plazas.
-export function gridLots(o) {
-  const lots = [];
-  const { nx, nz, lot = 26, street = 16, hMin = 10, hMax = 34, ox = 0, oz = 0, skip } = o;
-  const pitch = lot + street;
-  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
-    const x = ox + (i - (nx - 1) / 2) * pitch, z = oz + (j - (nz - 1) / 2) * pitch;
-    if (skip && skip(x, z)) continue;
-    const w = lot * (0.7 + Math.random() * 0.3), d = lot * (0.7 + Math.random() * 0.3);
-    lots.push({ x, z, w, d, h: hMin + Math.pow(Math.random(), 1.6) * (hMax - hMin) });
-  }
-  return lots;
-}
-
+// A set of buildings (each its own mesh) that monsters can knock down and people collide with.
 export class City {
-  constructor(scene, lots, night = false) {
-    this.b = lots.map((l, i) => ({ ...l, i, alive: true, k: 1, tint: TINTS[(Math.random() * TINTS.length) | 0] }));
-    const { map, emis } = windowTextures(night);
-    const side = new THREE.MeshStandardMaterial({ map, emissiveMap: emis, emissive: 0xffffff, emissiveIntensity: night ? 1.1 : 0, roughness: 0.95 });
-    const roof = new THREE.MeshStandardMaterial({ color: 0x8a847a, roughness: 1 });
-    const geo = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-    this.mesh = new THREE.InstancedMesh(geo, [side, side, roof, roof, side, side], this.b.length);
-    this.mesh.frustumCulled = false;
-    this.falling = [];
-    for (const b of this.b) { this.place(b); this.mesh.setColorAt(b.i, _c.set(b.tint)); }
-    scene.add(this.mesh);
-  }
-  place(b) {
-    _p.set(b.x, 0, b.z); _s.set(b.w, Math.max(0.5, b.h * b.k), b.d); _q.identity();
-    if (!b.alive) _q.setFromEuler(new THREE.Euler((1 - b.k) * b.tx, 0, (1 - b.k) * b.tz));
-    _m.compose(_p, _q, _s); this.mesh.setMatrixAt(b.i, _m); this.mesh.instanceMatrix.needsUpdate = true;
-  }
+  constructor() { this.b = []; this.falling = []; this.disposables = []; }
+  add(obj, x, z, w, d, h) { this.b.push({ obj, x, z, w, d, h, alive: true, k: 1, baseY: obj.position.y, sy: obj.scale.y }); }
   destroy(b, fx, audio) {
     if (!b.alive) return;
-    b.alive = false; b.tx = (Math.random() - 0.5) * 0.25; b.tz = (Math.random() - 0.5) * 0.25;
+    b.alive = false; b.tx = (Math.random() - 0.5) * 0.3; b.tz = (Math.random() - 0.5) * 0.3;
     this.falling.push(b);
-    this.mesh.setColorAt(b.i, _c.set(b.tint).multiplyScalar(0.45)); this.mesh.instanceColor.needsUpdate = true;
-    if (fx) { _p.set(b.x, b.h * 0.4, b.z); fx.debris(_p, 18, Math.max(1, b.h / 14), b.tint); fx.shake(0.6); }
-    if (audio) audio.boom(0.5);
+    if (fx) { _p.set(b.x, b.h * 0.35, b.z); fx.debris(_p, 22, Math.max(1, b.h / 14), 0x8a7a68); fx.shake(0.7); }
+    if (audio) audio.boom(0.55);
   }
-  // Buildings (alive) whose footprint touches a circle.
   touching(x, z, r) {
     const out = [];
     for (const b of this.b) if (b.alive && Math.abs(b.x - x) < b.w / 2 + r && Math.abs(b.z - z) < b.d / 2 + r) out.push(b);
     return out;
   }
   smash(x, z, r, fx, audio) { let n = 0; for (const b of this.touching(x, z, r)) { this.destroy(b, fx, audio); n++; } return n; }
-  // Push a point out of standing buildings (for people on foot).
   collide(pos, r) {
     for (const b of this.b) {
       if (!b.alive) continue;
@@ -80,8 +34,80 @@ export class City {
   update(dt) {
     for (let i = this.falling.length - 1; i >= 0; i--) {
       const b = this.falling[i];
-      b.k = Math.max(0.12, b.k - dt * 1.6); this.place(b);
-      if (b.k <= 0.12) this.falling.splice(i, 1);
+      b.k = Math.max(0.1, b.k - dt * 1.5);
+      // the tower drops into its own footprint and leans as it goes
+      b.obj.scale.y = b.sy * b.k; b.obj.rotation.x = (1 - b.k) * b.tx; b.obj.rotation.z = (1 - b.k) * b.tz;
+      if (b.k <= 0.1) this.falling.splice(i, 1);
     }
   }
+  dispose() { for (const d of this.disposables) d.dispose(); }
+}
+
+const PALETTE = [0xb08a6a, 0x9a8c7a, 0xc2a888, 0x8c7260, 0xa89888, 0x7a6a5c];
+
+function mulberry(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// Keep a random fraction of an InstancedMesh's instances (street furniture is far denser than a monster fight needs).
+function thin(mesh, keep, rnd) {
+  const n = mesh.count, m = mesh.instanceMatrix.array, c = mesh.instanceColor && mesh.instanceColor.array, tmp = new Float32Array(16);
+  const target = Math.max(1, Math.floor(n * keep));
+  for (let i = 0; i < target; i++) {
+    const j = i + Math.floor(rnd() * (n - i));
+    tmp.set(m.subarray(i * 16, i * 16 + 16)); m.copyWithin(i * 16, j * 16, j * 16 + 16); m.set(tmp, j * 16);
+    if (c) for (let k = 0; k < 3; k++) { const t = c[i * 3 + k]; c[i * 3 + k] = c[j * 3 + k]; c[j * 3 + k] = t; }
+  }
+  mesh.count = target; mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+}
+const KEEP = { Cars: 0.4, StreetTrees: 0.7, Streetlights: 0.6, Trafficlights: 1, People: 0, Trashcans: 0, Benches: 0, Hydrants: 0 };
+
+/**
+ * A downtown grid built from Three.js's city generators at real scale (1 unit = 1 m): one masonry
+ * tower per block from SkyscraperGenerator, plus CityGenerator's sidewalks, road markings, parked
+ * cars, trees and lights. `clear(x, z)` leaves blocks empty.
+ */
+export function generatedCity(scene, o = {}) {
+  const rnd = mulberry(o.seed ?? 7);
+  const gen = new CityGenerator({ seed: o.seed ?? 7, blocksX: o.blocks ?? 9, blocksZ: o.blocks ?? 9, lot: o.lot ?? 34, lotsX: 1, lotsZ: 1, street: o.street ?? 16, sidewalkWidth: 3, curbRadius: 4 });
+  const L = gen.layout, group = new THREE.Group(), city = new City(), slabs = [];
+  const mats = PALETTE.map((c) => createSkyscraperMaterial(uniform(new THREE.Color(c)), { interiors: o.interiors ?? 'average', relief: false }));
+  for (let bx = 0; bx < L.blocksX; bx++) for (let bz = 0; bz < L.blocksZ; bz++) {
+    const x = -L.cityW / 2 + bx * (L.blockW + L.street) + L.blockW / 2, z = -L.cityD / 2 + bz * (L.blockD + L.street) + L.blockD / 2;
+    slabs.push(new THREE.Matrix4().makeTranslation(x, 0, z));
+    if (o.clear && o.clear(x, z)) continue;
+    const w = L.innerLotX - 1 - rnd() * 3, d = L.innerLotZ - 1 - rnd() * 3, t = rnd(), h = (o.hMin ?? 14) + t * t * ((o.hMax ?? 62) - (o.hMin ?? 14));
+    const tower = new SkyscraperGenerator({ seed: Math.floor(rnd() * 1e5), totalHeight: h, footprint: { width: w, depth: d }, floorHeight: 3.3 + rnd() * 0.9, bayWidth: 2.8 + rnd() * 1.4, chamferWidth: rnd() < 0.25 ? 3 : 0, setbackDepth: rnd() < 0.3 ? 1.5 : 0, stringCourseEvery: 2 + Math.floor(rnd() * 4), acChance: 0 }, mats[(bx * 3 + bz * 5) % mats.length]);
+    const obj = tower.build();
+    obj.position.set(x, gen.parameters.curbHeight, z); obj.castShadow = obj.receiveShadow = true;
+    group.add(obj); city.add(obj, x, z, w, d, h); city.disposables.push(tower);
+  }
+  group.add(gen.sidewalk.build(slabs));
+  const furniture = gen.buildFurniture(rnd);
+  for (const kind of [...furniture.children]) {
+    const keep = KEEP[kind.name] ?? 0;
+    if (!keep) { furniture.remove(kind); continue; }
+    kind.traverse((m) => { if (m.isInstancedMesh) { if (keep < 1) thin(m, keep, rnd); m.castShadow = false; } });
+  }
+  group.add(furniture);
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(L.cityW + 1600, L.cityD + 1600).rotateX(-Math.PI / 2), createRoadMaterial(L));
+  road.receiveShadow = true; group.add(road);
+  scene.add(group);
+  city.group = group; city.radius = Math.min(L.cityW, L.cityD) / 2; city.disposables.push(gen);
+  return city;
+}
+
+/**
+ * A hand-placed row of low masonry buildings (for 1940s Ginza), each from SkyscraperGenerator.
+ * lots: [{ x, z, w, d, h }]
+ */
+export function streetCity(scene, lots, o = {}) {
+  const city = new City(), group = new THREE.Group();
+  const mats = PALETTE.map((c) => createSkyscraperMaterial(uniform(new THREE.Color(c)), { interiors: o.interiors ?? true }));
+  lots.forEach((l, i) => {
+    const gen = new SkyscraperGenerator({ seed: 100 + i * 7, totalHeight: l.h, footprint: { width: l.w, depth: l.d }, floorHeight: 3.3 + (i % 3) * 0.25, bayWidth: 2.1 + (i % 4) * 0.3, chamferWidth: 0, setbackDepth: 0, stringCourseEvery: 2, acChance: 0 }, mats[i % mats.length]);
+    const obj = gen.build();
+    obj.position.set(l.x, 0, l.z); obj.castShadow = obj.receiveShadow = true;
+    group.add(obj); city.add(obj, l.x, l.z, l.w, l.d, l.h); city.disposables.push(gen);
+  });
+  scene.add(group); city.group = group;
+  return city;
 }

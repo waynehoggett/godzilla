@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { part, pivot } from './godzilla.js';
 
 const box = new THREE.BoxGeometry(1, 1, 1);

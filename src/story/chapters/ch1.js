@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { StoryScene, Walker, Turret } from '../storyScene.js';
 import { clamp, turnToward } from '../../core/scene.js';
 import { setupSky, ground } from '../../world/sky.js';
@@ -17,7 +17,7 @@ export class Ch1 extends StoryScene {
   constructor(game, opts) {
     super(game, opts);
     const s = this.scene;
-    this.sky = setupSky(s, 'night', { near: 40, far: 720, hi: 2.4, sunI: 2.0 });
+    this.sky = setupSky(s, 'night', { near: 40, far: 720, sunI: 3.4, amb: 1.6, shadow: 90 }, game.renderer);
     ground(s, 0x4d4a3a, 1200);
     this.ocean = new Ocean(s, { y: -3, amp: 0.6, deep: 0x030d16, shallow: 0x123c50, sunCol: 0x9db4e0 });
     palms(s, 110, 170, 520, 0.9, (x, z) => Math.hypot(x - 30, z - 110) > 60);
@@ -120,7 +120,7 @@ export class Ch1 extends StoryScene {
           const k = clamp((L.t - 1.0) / 0.25, 0, 1);
           G.pos.lerpVectors(L.from, L.to, k); g.set.jaw = 1;
           if (k >= 1) {
-            if (Math.hypot(w.pos.x - L.target.x, w.pos.z - L.target.z) < 7.5) this.damage(55, 'Godzilla caught you before the tree line.');
+            if (Math.hypot(w.pos.x - L.target.x, w.pos.z - L.target.z) < 7.5) this.damage(40, 'Godzilla caught you before the tree line.');
             this.fx.debris(L.target, 12, 1); this.audio.boom(0.7); this.fx.shake(1.5); G.lunge = null; G.lungeT = 2.3;
           }
         }
@@ -146,6 +146,7 @@ export class Ch1 extends StoryScene {
     g.update(dt);
     if (G.speed > 0) { G.stepT -= dt; if (G.stepT <= 0) { G.stepT = 0.55; const k = clamp(1 - dP / 160, 0.1, 1); this.audio.step(0.5 * k); this.fx.shake(0.5 * k); } }
     this.beacon.material.opacity = 0.25 + Math.sin(this.t * 4) * 0.1;
+    this.focus.copy(w.pos);
     this.ocean.update(dt, this.camera);
     if (this.phase !== 'cockpit') this.ui.meter('Stamina', w.stamina, '#e9c46a'); else this.ui.meter(null);
   }

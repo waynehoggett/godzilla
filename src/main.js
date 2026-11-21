@@ -1,11 +1,13 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import './style.css';
 import { Input } from './core/input.js';
 import { AudioSys } from './core/audio.js';
 import { UI } from './core/ui.js';
 import { Save } from './core/save.js';
+import { loadAssets } from './core/assets.js';
 import { MenuScene } from './menuScene.js';
 import { ViewerScene } from './viewerScene.js';
+import { GlbView } from './glbView.js';
 import { BrawlScene } from './brawl/brawlScene.js';
 import { RIVALS, LADDER, ARENAS } from './brawl/roster.js';
 import { CHAPTERS, ENDING } from './story/script.js';
@@ -15,20 +17,34 @@ const FOOT = 'Unofficial, non-commercial fan project. Godzilla and related chara
 
 class Game {
   constructor() {
-    const canvas = document.getElementById('c');
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
+    const canvas = document.getElementById('c'), q0 = new URLSearchParams(location.search);
+    this.save = new Save();
+    // WebGPU where the browser has it, WebGL 2 otherwise (same code path either way)
+    this.renderer = new THREE.WebGPURenderer({ canvas, antialias: true, powerPreference: 'high-performance', forceWebGL: new URLSearchParams(location.search).has('webgl') });
+    this.setGraphics(this.save.data.lite || q0.has('lite'));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.input = new Input(canvas);
     this.audio = new AudioSys();
-    this.save = new Save();
     this.audio.muted = this.save.data.muted;
     this.ui = new UI(this.input, this.audio);
     this.current = null; this.paused = false; this.busy = false; this.mode = 'menu'; this.arena = null;
     this.last = performance.now();
+    this.speed = Math.max(1, Math.min(60, +(q0.get('speed') || 1)));
     this.input.onPause = () => this.togglePause();
     document.getElementById('pauseBtn').addEventListener('click', () => this.togglePause());
     addEventListener('resize', () => this.resize());
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.mode !== 'menu' && !this.paused && !this.busy) this.togglePause(); });
+    this.start();
+  }
+
+  async start() {
+    const el = document.getElementById('loading'), bar = el.querySelector('i');
+    try {
+      await this.renderer.init();
+      await loadAssets((k) => { bar.style.width = Math.round(k * 100) + '%'; });
+    } catch (e) { el.querySelector('span').textContent = 'Could not start: ' + (e.message || e); throw e; }
+    el.remove();
     this.resize();
     this.renderer.setAnimationLoop(() => this.frame());
     this.boot();
@@ -44,8 +60,9 @@ class Game {
     this.last = now;
     const s = this.current;
     if (!s) return;
-    if (!this.paused) { this.input.update(); s.tick(dt); }
-    this.renderer.render(s.scene, s.camera);
+    // ?speed=N runs N simulation steps per frame (used by the automated play-through checks)
+    if (!this.paused) for (let i = 0; i < this.speed && this.current === s && !this.paused; i++) { this.input.update(); s.tick(dt); }
+    s.render();
   }
 
   // Fade out, tear down the current scene, optionally show story cards, then build the next scene.
@@ -55,7 +72,6 @@ class Game {
     this.ui.closeMenu();
     await this.ui.fade(true);
     if (this.current) { this.current.dispose(); this.current = null; }
-    this.renderer.renderLists.dispose();
     this.paused = false; this.input.clear(); this.ui.hud(false); this.ui.reset();
     if (cards && cards.length && !this.ui.skipCards) {
       this.audio.music('dread');
@@ -75,6 +91,7 @@ class Game {
 
   boot() {
     const q = new URLSearchParams(location.search), sc = q.get('scene');
+    if (sc === 'glb') return this.swap(() => new GlbView(this, q));
     if (sc === 'view') return this.swap(() => new ViewerScene(this, q));
     if (sc === 'brawl') return this.startBrawl(q.get('rival') || 'rodan', false, q.get('arena'));
     const i = CHAPTERS.findIndex((c) => c.id === sc);
@@ -93,12 +110,20 @@ class Game {
       title: 'GODZILLA<br><em>MINUS ONE</em>', sub: 'An unofficial fan game',
       items: [
         { label: 'Story Mode', small: 'You are Koichi Shikishima. Odo Island to Sagami Bay, 1945–1947.', go: () => this.showStory() },
-        { label: 'Kaiju Brawl', small: 'You are Godzilla. Fight Rodan, Mothra, Mechagodzilla and King Ghidorah.', go: () => this.showBrawl() },
+        { label: 'Kaiju Brawl', small: 'You are Godzilla. Fight Rodan, Mothra, King Kong, Mechagodzilla and King Ghidorah.', go: () => this.showBrawl() },
         { label: 'How to Play', go: () => this.showHelp() },
         { label: 'Sound: ' + (this.audio.muted ? 'Off' : 'On'), go: () => { this.toggleSound(); this.showMain(); } },
+        { label: 'Graphics: ' + (this.lite ? 'Low' : 'High'), small: 'Low turns off bloom and shadows and renders at lower resolution.', go: () => { this.save.set('lite', !this.lite); this.setGraphics(!this.lite); this.toMenu(); } },
       ],
       foot: FOOT,
     });
+  }
+  // Low: no bloom or shadows, half-resolution rendering. Takes effect on the next scene.
+  setGraphics(lite) {
+    this.lite = !!lite;
+    this.renderer.shadowMap.enabled = !this.lite;
+    this.renderer.setPixelRatio(this.lite ? Math.min(devicePixelRatio || 1, 1) * 0.6 : Math.min(devicePixelRatio || 1, 1.5));
+    if (this.current) this.resize();
   }
   toggleSound() { this.audio.setMuted(!this.audio.muted); this.save.set('muted', this.audio.muted); }
   showHelp() {
@@ -129,7 +154,7 @@ class Game {
   }
   showBrawl() {
     const beat = this.save.data.brawl, arenaName = this.arena ? ARENAS[this.arena].name : 'Rival\'s home ground';
-    const items = [{ label: 'Ladder' + (this.save.data.ladder ? ' ✓' : ''), small: 'All four rivals in a row. Some health carries over.', go: () => this.startBrawl(LADDER[0], true) }];
+    const items = [{ label: 'Ladder' + (this.save.data.ladder ? ' ✓' : ''), small: 'All five rivals in a row. Some health carries over.', go: () => this.startBrawl(LADDER[0], true) }];
     for (const k of LADDER) items.push({ label: RIVALS[k].name + (beat[k] ? ' ✓' : ''), small: RIVALS[k].tag, go: () => this.startBrawl(k, false, this.arena) });
     items.push({ label: 'Arena: ' + arenaName, small: 'Tap to change', go: () => { const ks = [null, ...Object.keys(ARENAS)]; this.arena = ks[(ks.indexOf(this.arena) + 1) % ks.length]; this.showBrawl(); } });
     items.push({ label: 'Back', back: true, go: () => this.showMain() });

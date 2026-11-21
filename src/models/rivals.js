@@ -1,5 +1,7 @@
-import * as THREE from 'three';
-import { blobGeo, part, pivot } from './godzilla.js';
+import * as THREE from 'three/webgpu';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { assets } from '../core/assets.js';
+import { blobGeo, part, pivot, findBones } from './godzilla.js';
 
 const coneGeo = new THREE.ConeGeometry(1, 1, 5);
 const eyeGeo = new THREE.SphereGeometry(1, 8, 6);
@@ -241,4 +243,51 @@ export function makeGhidorah() {
     for (const T of tails) T.segs.forEach((s, i) => { s.rotation.y = Math.sin(t * 1.3 - i * 0.6 + T.s) * 0.1; });
   }
   return { root, set, update, height: 15, radius: 3.6, mouths: () => necks.map((n) => n.mouth.getWorldPosition(new THREE.Vector3())), flash(k) { gold.emissive.setRGB(k, k * 0.3, k * 0.2); } };
+}
+
+// ---------------- KING KONG (rigged model with its own animation clips, see CREDITS.md) ----------------
+let kongFit = null;
+const KONG_MOVES = { punch: ['attack2', 1], leap: ['smash_char', 1.3], boulders: ['throw', 2], roar: ['roar', 1.7] };
+export function makeKong() {
+  const src = assets.kong;
+  const root = new THREE.Group(), holder = new THREE.Group(), model = cloneSkinned(src.scene);
+  holder.add(model); root.add(holder);
+  const mats = [];
+  model.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.side = THREE.FrontSide; mats.push(m.material); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
+  const mixer = new THREE.AnimationMixer(model), act = {};
+  for (const c of src.animations) act[c.name.split('|').pop()] = mixer.clipAction(c);
+  act.idle.play(); mixer.update(0); model.updateMatrixWorld(true);
+  if (!kongFit) {
+    const box = new THREE.Box3().setFromObject(model, true), k = 9.4 / (box.max.y - box.min.y);
+    kongFit = { k, y: -box.min.y * k };
+  }
+  holder.scale.setScalar(kongFit.k); holder.position.y = kongFit.y;
+  const B = findBones(model, { head: 'bip_head', lip: 'def_c_lipLwr01', hand: 'bip_hand_r' });
+  const set = { flap: 0, fold: 0, attack: 0, jaw: 0, walk: 0, charge: 0, move: null };
+  let cur = 'idle', once = false, lastMove = null, punch = 0;
+  const go = (name, fade = 0.18, loop = true, speed = 1) => {
+    if (name === cur && loop) return;
+    const a = act[name], prev = act[cur];
+    a.reset(); a.timeScale = speed; a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); a.clampWhenFinished = !loop;
+    a.play(); if (prev && prev !== a) prev.crossFadeTo(a, fade, false);
+    cur = name; once = !loop;
+  };
+  mixer.addEventListener('finished', () => { once = false; });
+  function update(dt) {
+    if (set.fold > 0.9 && !set.move) { if (cur !== 'ragdoll') go('ragdoll', 0.5, false, 1); }
+    else if (set.move && set.move !== lastMove) {
+      let [clip, speed] = KONG_MOVES[set.move] || ['attack3', 1];
+      if (set.move === 'punch') clip = punch++ % 2 ? 'attack3' : 'attack2';
+      go(clip, 0.1, false, speed);
+    } else if (!once) go(set.walk > 0.3 ? 'walk' : 'idle', 0.25, true, set.walk > 0.3 ? 1.25 : 1);
+    lastMove = set.move;
+    mixer.update(dt);
+  }
+  const v = new THREE.Vector3();
+  return {
+    root, set, update, height: 9.4, radius: 2.8,
+    mouths: () => [B.lip.getWorldPosition(new THREE.Vector3())],
+    handWorld: (out = v) => B.hand.getWorldPosition(out),
+    flash(k) { for (const m of mats) m.emissive.setRGB(k * 0.6, k * 0.15, k * 0.1); },
+  };
 }

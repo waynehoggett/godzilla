@@ -1,21 +1,22 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { GameScene } from './core/scene.js';
 import { setupSky, ground } from './world/sky.js';
 import { makeGodzilla } from './models/godzilla.js';
-import { makeRodan, makeMothra, makeGhidorah } from './models/rivals.js';
+import { makeRodan, makeMothra, makeGhidorah, makeKong } from './models/rivals.js';
 import * as VEH from './models/vehicles.js';
 import * as PPL from './models/people.js';
 
 // Dev tool: /?scene=view&m=godzilla&a=0.8  — look at one model on a turntable.
 const MAKERS = {
-  godzilla: () => makeGodzilla(), mecha: () => makeGodzilla({ mecha: true }), rodan: makeRodan, mothra: makeMothra, ghidorah: makeGhidorah,
+  godzilla: () => makeGodzilla(), mecha: () => makeGodzilla({ mecha: true }), kong: makeKong, rodan: makeRodan, mothra: makeMothra, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
   mine: () => ({ root: VEH.makeMine() }), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko,
 };
 export class ViewerScene extends GameScene {
   constructor(game, q) {
     super(game);
-    this.sky = setupSky(this.scene, 'day');
+    this.sky = setupSky(this.scene, q.get('sky') || 'day', { shadow: 30 }, game.renderer);
+    this.focus.set(0, 0, 0);
     ground(this.scene, 0x6a6f66, 400);
     this.m = MAKERS[q.get('m') || 'godzilla']();
     this.scene.add(this.m.root);

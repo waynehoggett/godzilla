@@ -1,4 +1,6 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
+import { pass } from 'three/tsl';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
 import { FX } from './fx.js';
 
 // Base for every 3D scene: owns the THREE scene/camera, effects, timers and cleanup.
@@ -8,7 +10,12 @@ export class GameScene {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, 9000);
     this.fx = new FX(this.scene);
-    this.t = 0; this.timers = []; this.over = false;
+    this.t = 0; this.timers = []; this.over = false; this.focus = new THREE.Vector3();
+    // HDR scene pass + bloom: anything brighter than white (fins, heat ray, fire) glows
+    const scenePass = pass(this.scene, this.camera), colour = scenePass.getTextureNode('output');
+    this.bloom = bloom(colour, 0.55, 0.6, 1.0);
+    this.pipeline = new THREE.RenderPipeline(game.renderer);
+    this.pipeline.outputNode = game.lite ? colour : colour.add(this.bloom);
   }
   after(sec, fn) { this.timers.push({ t: this.t + sec, fn }); }
   say(who, text, dur) { this.ui.subtitle(who, text, dur); }
@@ -17,7 +24,7 @@ export class GameScene {
     for (let i = this.timers.length - 1; i >= 0; i--) if (this.timers[i].t <= this.t) this.timers.splice(i, 1)[0].fn();
     this.update(dt);
     this.fx.update(dt);
-    if (this.sky) this.sky.follow(this.camera);
+    if (this.sky) this.sky.follow(this.camera, this.focus);
     this.fx.applyShake(this.camera);
   }
   update() {}
@@ -26,9 +33,12 @@ export class GameScene {
     const p = v.clone().project(this.camera);
     return p.z > 1 || p.z < -1 ? null : p;
   }
+  render() { this.pipeline.render(); }
   dispose() {
+    this.pipeline.dispose();
     this.audio.engine(false);
     this.input.tapFire = false;
+    if (this.city && this.city.dispose) this.city.dispose();
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) {

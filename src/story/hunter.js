@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { Beam } from '../core/fx.js';
 import { clamp, damp, turnToward, segDist } from '../core/scene.js';
 import { makeGodzilla } from '../models/godzilla.js';
@@ -36,7 +36,7 @@ export class Hunter {
     set.headPitch = damp(set.headPitch, clamp(-Math.atan2(pl.pos.y - this.head.y, Math.max(40, flatD)) * 0.7, -0.8, 0.25), 3, dt);
     if (S.over) { this.beam.off(); return; }
     if (dHead < 95 && this.buzzCd <= 0) { this.buzzCd = 2.5; this.aggro = Math.min(1, this.aggro + 0.4); S.audio.roar(0.8, 1, 1.4); }
-    if (attack && this.aggro > 0.3 && dHead < 42 && this.biteCd <= 0) { this.biteCd = 3; this.jawT = 0.5; S.damage(28, 'Godzilla snatched the Shinden out of the air.'); }
+    if (attack && this.aggro > 0.3 && dHead < 42 && this.biteCd <= 0) { this.biteCd = 3; this.jawT = 0.5; S.damage(22, 'Godzilla snatched the Shinden out of the air.'); }
     if (pl.pos.distanceTo(this.chest) < 24) S.damage(30, 'You flew straight into him.');
     this.jawT = Math.max(0, (this.jawT || 0) - dt);
     let jaw = this.jawT > 0 ? 1 : 0;
@@ -49,7 +49,7 @@ export class Hunter {
         r.aim.lerp(pl.pos, 1 - Math.exp(-0.85 * dt)); jaw = 1;
         const from = g.mouthWorld(_a).clone(), end = _b.subVectors(r.aim, from).normalize().multiplyScalar(1500).add(from);
         this.beam.set(from, end, 6); S.fx.shake(0.4);
-        if (segDist(pl.pos, from, end) < 16) S.damage(40, 'The heat ray caught the Shinden.');
+        if (segDist(pl.pos, from, end) < 16) S.damage(30, 'The heat ray caught the Shinden.');
       } else { this.beam.off(); set.charge = 0; this.ray = null; this.rayCd = this.rayEvery; }
     } else if (attack && this.canRay && this.aggro > 0.3 && this.rayCd <= 0 && flatD > 200 && flatD < 950) {
       this.ray = { t: 0, wind: 2.8, aim: pl.pos.clone(), fired: false };

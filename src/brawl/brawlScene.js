@@ -1,9 +1,9 @@
-import * as THREE from 'three';
+import * as THREE from 'three/webgpu';
 import { GameScene, clamp, damp, turnToward } from '../core/scene.js';
 import { Beam } from '../core/fx.js';
 import { setupSky, ground } from '../world/sky.js';
 import { Ocean } from '../world/ocean.js';
-import { City, gridLots } from '../world/city.js';
+import { generatedCity } from '../world/city.js';
 import { palms } from '../world/props.js';
 import { makeGodzilla } from '../models/godzilla.js';
 import { makeWarship } from '../models/vehicles.js';
@@ -43,6 +43,7 @@ export class BrawlScene extends GameScene {
     this.shots = []; this.zones = []; this.vig = 0; this.phase = 'intro';
     this.missileGeo = new THREE.ConeGeometry(1.6, 9, 6).rotateX(Math.PI / 2);
     this.missileMat = new THREE.MeshStandardMaterial({ color: 0xd8dde4, metalness: 0.6, roughness: 0.4 });
+    this.rockGeo = new THREE.DodecahedronGeometry(6, 1); this.rockMat = new THREE.MeshStandardMaterial({ color: 0x6a6258, roughness: 1, flatShading: true });
 
     this.ui.hud(true);
     this.ui.controls([{ b: 'a', label: 'Claw', key: 'Space' }, { b: 'b', label: 'Tail', key: 'K' }, { b: 'c', label: 'Heat Ray', key: 'Hold E' }, { b: 'd', label: 'Block', key: 'Shift' }, { b: 'e', label: 'Roar', key: 'R' }]);
@@ -56,18 +57,20 @@ export class BrawlScene extends GameScene {
   buildArena() {
     const s = this.scene;
     if (this.arena === 'city') {
-      this.sky = setupSky(s, 'night', { near: 180, far: 1500, hi: 2.2, sunI: 1.8 });
-      ground(s, 0x24262a, 2400);
-      this.city = new City(s, gridLots({ nx: 13, nz: 13, lot: 34, street: 24, hMin: 12, hMax: 44, skip: (x, z) => { const d = Math.hypot(x, z); return d < 100 || d > 400; } }), true);
+      this.sky = setupSky(s, 'night', { near: 200, far: 1500, sunI: 4.2, amb: 2.2, env: 3, bot: 0x33405e, shadow: 280 }, this.game.renderer);
+      const t0 = performance.now();
+      this.city = generatedCity(s, { clear: (x, z) => Math.hypot(x, z) < 60 || (Math.abs(x) < 20 && Math.abs(z) < 140) });
+      this.arenaR = this.city.radius - 14;
+      console.info('city built in', Math.round(performance.now() - t0), 'ms', this.city.b.length, 'towers');
     } else if (this.arena === 'bay') {
-      this.sky = setupSky(s, 'storm');
+      this.sky = setupSky(s, 'storm', { shadow: 260 }, this.game.renderer);
       this.ocean = new Ocean(s, { amp: 1.5, deep: 0x0a2230, shallow: 0x3a6c7c });
       for (let i = 0; i < 4; i++) {
         const w = makeWarship(70), a = i * 1.6 + 0.5;
         w.root.position.set(Math.cos(a) * 420, 0, Math.sin(a) * 420); w.root.rotation.y = a; s.add(w.root);
       }
     } else {
-      this.sky = setupSky(s, 'dusk', { far: 1900 });
+      this.sky = setupSky(s, 'dusk', { far: 1900, shadow: 260 }, this.game.renderer);
       ground(s, 0x9c8a62, 430);
       ground(s, 0x55693a, 250, 0.1);
       this.ocean = new Ocean(s, { y: -4, amp: 0.8, deep: 0x1a2c44, shallow: 0x7a6a78, sunCol: 0xffb072, sunDir: [-0.7, 0.35, -0.5] });
@@ -95,7 +98,7 @@ export class BrawlScene extends GameScene {
     if (kb) { _b.set(R.pos.x - from.x, 0, R.pos.z - from.z).normalize(); R.vel.addScaledVector(_b, kb); }
     if ((heavy || dmg >= (this.cfg.armor || 0)) && !quiet && R.poise <= 0 && R.state !== 'stagger') {
       R.state = 'stagger'; R.st = 0; R.stagDur = heavy ? 1.4 : 0.5; this.hideRivalBeams();
-      this.m.set.attack = 0; this.m.set.charge = 0;
+      this.m.set.attack = 0; this.m.set.charge = 0; this.m.set.move = null;
     }
     if (R.hp <= 0) this.ko(true);
   }
@@ -267,8 +270,9 @@ export class BrawlScene extends GameScene {
     const R = this.R, P = this.P, A = R.atk, d = A.d, t = R.st, m = this.m, set = m.set, c = this.cfg;
     const wk = clamp(t / d.wind, 0, 1), ph = t < d.wind ? 0 : t < d.wind + d.act ? 1 : t < d.wind + d.act + d.rec ? 2 : 3;
     const ak = clamp((t - d.wind) / d.act, 0, 1);
+    set.move = d.id;
     if (ph === 3) {
-      R.cds[d.id] = d.cd * (1.3 - this.diff * 0.1); R.state = 'move'; R.st = 0; R.think = 0.4;
+      R.cds[d.id] = d.cd * (1.3 - this.diff * 0.1); R.state = 'move'; R.st = 0; R.think = 0.4; set.move = null;
       set.attack = 0; set.charge = 0; set.jaw = 0; this.hideRivalBeams(); return;
     }
     if (ph === 0) R.yaw = turnToward(R.yaw, want, 3 * dt);
@@ -296,7 +300,7 @@ export class BrawlScene extends GameScene {
         }
       } else if (ph === 1) {
         if (!A.warned) { A.warned = true; A.from.copy(R.pos); A.alt0 = R.alt; }
-        R.pos.lerpVectors(A.from, A.target, ak); R.alt = A.alt0 + (d.low - A.alt0) * ak;
+        R.pos.lerpVectors(A.from, A.target, ak); R.alt = A.alt0 + (d.low - A.alt0) * ak + (d.arc ? Math.sin(ak * Math.PI) * d.arc : 0);
         if (!A.fired && ak > 0.8) {
           A.fired = true;
           if (flat(P.pos, A.target) < d.r) this.hurtPlayer(d.dmg, A.from, d.kb);
@@ -356,7 +360,7 @@ export class BrawlScene extends GameScene {
           const target = P.pos.clone();
           if (i > 0) { target.x += (Math.random() - 0.5) * 70 + Math.sin(P.yaw) * this.input.move.y * 30 * lead; target.z += (Math.random() - 0.5) * 70 + Math.cos(P.yaw) * this.input.move.y * 30 * lead; }
           const s = { target, t: -i * (d.bolt ? 0.3 : 0.22), dur: d.fly, r: d.r, dmg: d.dmg, bolt: !!d.bolt, from: this.center(R, new V()), warned: false, mesh: null };
-          if (!d.bolt) { s.mesh = new THREE.Mesh(this.missileGeo, this.missileMat); s.mesh.visible = false; this.scene.add(s.mesh); }
+          if (!d.bolt) { s.mesh = new THREE.Mesh(d.rock ? this.rockGeo : this.missileGeo, d.rock ? this.rockMat : this.missileMat); s.mesh.castShadow = true; s.mesh.visible = false; this.scene.add(s.mesh); s.rock = !!d.rock; }
           this.shots.push(s);
         }
       } else if (ph === 2) { set.attack = damp(set.attack, 0, 4, dt); set.charge = damp(set.charge, 0, 4, dt); }
@@ -375,7 +379,7 @@ export class BrawlScene extends GameScene {
         s.mesh.visible = true;
         _a.lerpVectors(s.from, s.target, k); _a.y = s.from.y * (1 - k) + this.gy * k + Math.sin(k * Math.PI) * 70;
         s.mesh.lookAt(_a); s.mesh.position.copy(_a);
-        if (Math.random() < 0.6) this.fx.spawn(_a, _b.set(0, 4, 0), 0.6, 1.4, 0xffc070, 0x555050, 0, 1.5, 1);
+        if (!s.rock && Math.random() < 0.6) this.fx.spawn(_a, _b.set(0, 4, 0), 0.6, 1.4, 0xffc070, 0x555050, 0, 1.5, 1);
       }
       if (k >= 1) {
         _a.set(s.target.x, this.gy + 3, s.target.z);
@@ -384,7 +388,8 @@ export class BrawlScene extends GameScene {
           this.fx.items.push({ m: bolt.g, t: 0, dur: 0.22, tick: () => {} }); this.fx.items.push({ m: bolt.tip, t: 0, dur: 0.22, tick: () => {} });
           this.audio.zap(0.5);
         }
-        this.fx.explosion(_a, 1.7); this.audio.boom(0.5); this.groundHit(s.target, 1);
+        if (s.rock) this.fx.debris(_a, 16, 1.6); else this.fx.explosion(_a, 1.7);
+        this.audio.boom(0.5); this.groundHit(s.target, 1);
         if (flat(P.pos, s.target) < s.r + 3) this.hurtPlayer(s.dmg, s.target, 25);
         if (s.mesh) this.scene.remove(s.mesh);
         this.shots.splice(i, 1);
@@ -402,13 +407,20 @@ export class BrawlScene extends GameScene {
     const P = this.P, R = this.R;
     let dx = P.pos.x - R.pos.x, dz = P.pos.z - R.pos.z; const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
     const back = 98 + clamp((d - 150) * 0.15, -10, 40);
-    _a.set(P.pos.x + dx * back - dz * 20, this.gy + 48 + clamp(R.alt * 0.25, 0, 20), P.pos.z + dz * back + dx * 20);
+    const side = this.city ? 0 : 20, up = this.city ? 92 : 48;
+    _a.set(P.pos.x + dx * back - dz * side, this.gy + up + clamp(R.alt * 0.25, 0, 20), P.pos.z + dz * back + dx * side);
     _b.set(P.pos.x + (R.pos.x - P.pos.x) * 0.42, this.gy + 30 + R.alt * 0.42, P.pos.z + (R.pos.z - P.pos.z) * 0.42);
     if (!this.look) this.look = _b.clone();
     if (snap) { this.camera.position.copy(_a); this.look.copy(_b); }
     else { const k = 1 - Math.exp(-4 * dt); this.camera.position.lerp(_a, k); this.look.lerp(_b, 1 - Math.exp(-6 * dt)); }
     if (this.camera.position.y < 6) this.camera.position.y = 6;
     this.camera.lookAt(this.look);
+    // towers standing between the camera and Godzilla step out of the way
+    if (this.city) for (const b of this.city.b) {
+      const cx = this.camera.position.x, cz = this.camera.position.z, ex = P.pos.x - cx, ez = P.pos.z - cz, l2 = ex * ex + ez * ez || 1;
+      const k = clamp(((b.x - cx) * ex + (b.z - cz) * ez) / l2, 0, 1), off = Math.hypot(cx + ex * k - b.x, cz + ez * k - b.z);
+      b.obj.visible = !(b.alive && k < 0.93 && off < b.w * 0.5 + 16);
+    }
   }
 
   update(dt) {
@@ -421,11 +433,13 @@ export class BrawlScene extends GameScene {
       const d = flat(P.pos, R.pos), min = P.radius + R.radius;
       if (d < min && d > 0.01) { const k = (min - d) / d, ax = (P.pos.x - R.pos.x) * k, az = (P.pos.z - R.pos.z) * k; P.pos.x += ax * 0.6; P.pos.z += az * 0.6; R.pos.x -= ax * 0.4; R.pos.z -= az * 0.4; }
     }
-    for (const F of [P, R]) { const d = Math.hypot(F.pos.x, F.pos.z); if (d > ARENA_R) { F.pos.x *= ARENA_R / d; F.pos.z *= ARENA_R / d; } }
+    const AR = this.arenaR || ARENA_R;
+    for (const F of [P, R]) { const d = Math.hypot(F.pos.x, F.pos.z); if (d > AR) { F.pos.x *= AR / d; F.pos.z *= AR / d; } }
 
     this.g.root.position.set(P.pos.x, this.gy, P.pos.z); this.g.root.rotation.y = P.yaw; this.g.update(dt);
     this.m.root.position.set(R.pos.x, this.gy + R.alt, R.pos.z); this.m.root.rotation.y = R.yaw; this.m.update(dt);
     this.updateCamera(dt);
+    this.focus.set((P.pos.x + R.pos.x) / 2, this.gy, (P.pos.z + R.pos.z) / 2);
     if (this.ocean) this.ocean.update(dt, this.camera);
     if (this.city) this.city.update(dt);
     if (this.arena === 'bay' && Math.random() < 0.3) { this.fx.splash(_a.set(P.pos.x + (Math.random() - 0.5) * 24, 1, P.pos.z + (Math.random() - 0.5) * 24), 0.8); if (R.alt < 10) this.fx.splash(_a.set(R.pos.x + (Math.random() - 0.5) * 30, 1, R.pos.z + (Math.random() - 0.5) * 30), 0.8); }

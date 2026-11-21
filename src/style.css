@@ -46,7 +46,7 @@ html, body {
 #subtitle.on { opacity: 1; }
 #subtitle b { color: #e9c46a; font-weight: 600; letter-spacing: .08em; margin-right: .5em; text-transform: uppercase; font-size: .8em; }
 #prompt {
-  position: absolute; top: 62%; left: 50%; transform: translate(-50%, -50%); font-family: var(--serif);
+  position: absolute; top: 27%; left: 50%; transform: translate(-50%, -50%); font-family: var(--serif);
   font-size: clamp(18px, 3.6vw, 34px); letter-spacing: .2em; padding: 8px 26px; border: 1px solid var(--paper);
   background: rgba(0,0,0,.55); animation: pulse .7s infinite alternate; white-space: nowrap;
 }
@@ -65,7 +65,7 @@ html, body {
 #marker b { display: block; width: 64px; height: 64px; border: 2px solid var(--blue); border-radius: 50%; margin: 0 auto; box-shadow: 0 0 12px var(--blue), inset 0 0 12px var(--blue); }
 #marker.ok b { border-color: #7dff8a; box-shadow: 0 0 16px #7dff8a, inset 0 0 12px #7dff8a; }
 #marker span { font-size: 12px; letter-spacing: .15em; text-shadow: 0 1px 3px #000; }
-#timing { position: absolute; left: 50%; top: 72%; transform: translateX(-50%); width: min(70vw, 520px); height: 26px; border: 1px solid var(--paper); background: rgba(0,0,0,.6); display: none; }
+#timing { position: absolute; left: 50%; top: 56%; transform: translateX(-50%); width: min(70vw, 520px); height: 26px; border: 1px solid var(--paper); background: rgba(0,0,0,.6); display: none; }
 #timing .zone { position: absolute; top: 0; bottom: 0; background: rgba(125,255,138,.55); }
 #timing .cursor { position: absolute; top: -6px; bottom: -6px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 8px #fff; }
 #hint { position: absolute; bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: 12px; letter-spacing: .08em; color: var(--paper); opacity: .8; text-shadow: 0 1px 3px #000; white-space: nowrap; }
@@ -140,3 +140,7 @@ body.touch #hint { display: none; }
   #screen button { padding: 8px 14px; }
   #subtitle { bottom: 70px; }
 }
+
+#loading { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #000; font-family: var(--serif); letter-spacing: .4em; text-transform: uppercase; font-size: 14px; color: var(--dim); }
+#loading div { width: min(60vw, 320px); height: 3px; background: rgba(236,230,216,.15); }
+#loading i { display: block; height: 100%; width: 0; background: var(--blue); box-shadow: 0 0 10px var(--blue); transition: width .2s; }
