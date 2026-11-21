@@ -36,14 +36,14 @@ export const RIVALS = {
     ],
   },
   ghidorah: {
-    name: 'King Ghidorah', tag: 'The three-headed king', make: makeGhidorah, scale: 4.6, hp: 820, poise: 165, speed: 22, flying: false, radius: 17, range: 78,
+    name: 'King Ghidorah', tag: 'The three-headed king', make: makeGhidorah, scale: 4.6, hp: 740, poise: 160, speed: 22, flying: false, radius: 17, range: 78,
     pitch: 2.9, arena: 'bay', beamColor: 0xffe24a, blocks: 0.12,
     attacks: [
-      { type: 'melee', id: 'bite', move: 'bite', min: 0, max: 64, cd: 2.4, w: 4, dmg: 16, r: 27, rec: 0.7, chain: 0.3 },
+      { type: 'melee', id: 'bite', move: 'bite', min: 0, max: 64, cd: 2.5, w: 4, dmg: 15, r: 27, rec: 0.75, chain: 0.2 },
       { type: 'melee', id: 'tailwhip', move: 'tailwhip', min: 0, max: 70, cd: 6, w: 2, dmg: 22, r: 34, rec: 0.8, kb: 70 },
-      { type: 'beam', id: 'gravity', move: 'gravity', min: 60, max: 420, cd: 7, w: 3, dps: 19, n: 3, act: 1.6, rec: 1.0 },
-      { type: 'volley', id: 'storm', move: 'storm', min: 0, max: 500, cd: 10, w: 2, dmg: 14, r: 17, n: 7, fly: 0.95, bolt: true, rec: 0.7 },
-      { type: 'gust', id: 'hurricane', move: 'hurricane', min: 0, max: 150, cd: 9, w: 1, dmg: 9, r: 180, kb: 110, rec: 0.8 },
+      { type: 'beam', id: 'gravity', move: 'gravity', min: 60, max: 420, cd: 7, w: 3, dps: 17, n: 3, act: 1.5, rec: 1.0 },
+      { type: 'volley', id: 'storm', move: 'storm', min: 0, max: 500, cd: 10, w: 2, dmg: 12, r: 17, n: 6, fly: 1.05, bolt: true, rec: 0.8 },
+      { type: 'gust', id: 'hurricane', move: 'hurricane', min: 0, max: 150, cd: 9, w: 1, dmg: 7, r: 180, kb: 110, rec: 0.9 },
     ],
   },
 };

@@ -48,8 +48,9 @@ export class AudioSys {
     const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), t = c.currentTime;
     s.buffer = this.buf[name]; s.playbackRate.value = rate * (o.jitter ? 1 + (Math.random() - 0.5) * o.jitter : 1); s.loop = !!o.loop;
     g.gain.setValueAtTime(vol, t);
-    if (o.dur) { g.gain.setValueAtTime(vol, t + Math.max(0.01, o.dur - 0.25)); g.gain.linearRampToValueAtTime(0.0001, t + o.dur); s.stop(t + o.dur + 0.05); }
     s.connect(g); g.connect(o.out || this.sfx); s.start(t);
+    // (a source must be started before its stop can be scheduled)
+    if (o.dur) { g.gain.setValueAtTime(vol, t + Math.max(0.01, o.dur - 0.25)); g.gain.linearRampToValueAtTime(0.0001, t + o.dur); s.stop(t + o.dur + 0.05); }
     return { s, g };
   }
   // Speak a recorded dialogue line if one exists for this speaker and text. Returns its length in seconds (0 if none).

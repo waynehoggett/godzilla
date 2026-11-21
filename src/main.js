@@ -162,13 +162,13 @@ class Game {
         <tr><td>Main action</td><td>Space, J or left click (fire, claw, dodge)</td></tr>
         <tr><td>Second action</td><td>K or right click (tail sweep)</td></tr>
         <tr><td>Special</td><td>E or L (heat ray, release mine, eject)</td></tr>
-        <tr><td>Guard / sprint / boost</td><td>Shift</td></tr>
+        <tr><td>Guard / sprint / boost</td><td>Shift (in a brawl: hold to block, tap with a direction to sidestep)</td></tr>
         <tr><td>Roar</td><td>R</td></tr>
         <tr><td>Pause, switch mode</td><td>Esc or the II button</td></tr>
       </table>`,
       plain: true,
       items: [{ label: 'Back', back: true, go: () => this.showMain() }],
-      foot: 'Each scene shows its own controls at the bottom of the screen. Red rings on the ground mark where an attack is about to land: get out of them.',
+      foot: 'Each scene shows its own controls at the bottom of the screen. Red rings on the ground mark where an attack is about to land: get out of them. In a brawl, claw presses chain into a three-hit combo, and heavy hits can knock a rival down.',
     });
   }
   showStory() {
