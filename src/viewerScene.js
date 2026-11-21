@@ -5,12 +5,16 @@ import { makeGodzilla } from './models/godzilla.js';
 import { makeRodan, makeMecha, makeGhidorah, makeKong } from './models/rivals.js';
 import * as VEH from './models/vehicles.js';
 import * as PPL from './models/people.js';
+import * as FOL from './world/foliage.js';
+
+const tree = (model) => { const root = new THREE.Group(); FOL.plant(root, model, [{ x: 0, y: 0, z: 0 }], { shadow: true }); return { root }; };
 
 // Dev tool: /?scene=view&m=godzilla&a=0.8  — look at one model on a turntable.
 const MAKERS = {
   godzilla: () => makeGodzilla(), mecha: makeMecha, kong: makeKong, rodan: makeRodan, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
-  mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), koichi: () => PPL.makeKoichi('pilot'), civil: () => PPL.makeKoichi('civil'), noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
+  mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), broadleaf: () => tree(FOL.broadleaf(2, { height: 11, spread: 0.7 })), broadleaf2: () => tree(FOL.broadleaf(3, { height: 8, spread: 0.9 })), palm: () => tree(FOL.palm(1)), bush: () => tree(FOL.bush(1)), fartree: () => tree(FOL.farTree(1)),
+  koichi: () => PPL.makeKoichi('pilot'), civil: () => PPL.makeKoichi('civil'), noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
 };
 export class ViewerScene extends GameScene {
   constructor(game, q) {

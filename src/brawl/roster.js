@@ -7,7 +7,7 @@ import { makeRodan, makeKong, makeMecha, makeGhidorah } from '../models/rivals.j
 export const RIVALS = {
   rodan: {
     name: 'Rodan', tag: 'The fire pteranodon', make: makeRodan, scale: 5, hp: 450, poise: 75, speed: 50, flying: true, hover: 46, radius: 15, range: 120,
-    pitch: 1.7, arena: 'island', beamColor: 0xff8a3c,
+    pitch: 1.7, arena: 'bay', beamColor: 0xff8a3c,
     attacks: [
       { type: 'dive', id: 'dive', move: 'dive', min: 50, max: 420, cd: 5.5, w: 3, dmg: 22, r: 26, up: 78, low: 0, kb: 55, rec: 2.1 },
       { type: 'gust', id: 'gust', move: 'gust', min: 0, max: 165, cd: 8, w: 1, dmg: 8, r: 175, kb: 95, rec: 0.7 },
@@ -16,7 +16,7 @@ export const RIVALS = {
   },
   kong: {
     name: 'King Kong', tag: 'The eighth wonder of the world', make: makeKong, scale: 5, hp: 640, poise: 110, speed: 30, flying: false, radius: 13, range: 54,
-    pitch: 0.7, arena: 'island', beamColor: 0xffffff, blocks: 0.2,
+    pitch: 0.7, arena: 'city', beamColor: 0xffffff, blocks: 0.2,
     attacks: [
       { type: 'melee', id: 'punch', move: 'punch', min: 0, max: 58, cd: 1.5, w: 4, dmg: 14, r: 24, rec: 0.55, chain: 0.45 },
       { type: 'dive', id: 'leap', move: 'leap', min: 75, max: 330, cd: 6, w: 3, dmg: 22, r: 27, up: 0, low: 0, kb: 70, arc: 48, rec: 1.2 },
@@ -52,5 +52,4 @@ export const LADDER = ['rodan', 'kong', 'mecha', 'ghidorah'];
 export const ARENAS = {
   city: { name: 'Ginza by night' },
   bay: { name: 'Sagami Bay' },
-  island: { name: 'Odo Island' },
 };

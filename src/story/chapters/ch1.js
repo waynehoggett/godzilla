@@ -1,9 +1,10 @@
 import * as THREE from 'three/webgpu';
 import { StoryScene, Walker, Turret } from '../storyScene.js';
 import { clamp, turnToward } from '../../core/scene.js';
-import { setupSky, ground } from '../../world/sky.js';
+import { setupSky } from '../../world/sky.js';
 import { Ocean } from '../../world/ocean.js';
-import { palms, beacon, hills } from '../../world/props.js';
+import { beacon } from '../../world/props.js';
+import { makeIsland } from '../../world/island.js';
 import { makeGodzilla } from '../../models/godzilla.js';
 import { makeZero } from '../../models/vehicles.js';
 import { makeKoichi, makeSoldier } from '../../models/people.js';
@@ -11,6 +12,8 @@ import { makeKoichi, makeSoldier } from '../../models/people.js';
 const V = THREE.Vector3;
 const ZERO = new V(30, 0, 130), GOAL = new V(150, 0, 45);
 const _a = new V();
+// distance from (x, z) to the segment a-b on the ground
+function toSegment(x, z, ax, az, bx, bz) { const dx = bx - ax, dz = bz - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1); return Math.hypot(x - ax - dx * t, z - az - dz * t); }
 
 // Odo Island, 1945. Reach the Zero, fail to fire, run.
 export class Ch1 extends StoryScene {
@@ -18,22 +21,26 @@ export class Ch1 extends StoryScene {
     super(game, opts);
     const s = this.scene;
     this.sky = setupSky(s, 'night', { near: 40, far: 720, sunI: 3.4, amb: 1.6, shadow: 90 }, game.renderer);
-    ground(s, 0x4d4a3a, 1200);
     this.ocean = new Ocean(s, { y: -3, amp: 0.6, deep: 0x030d16, shallow: 0x123c50, sunCol: 0x9db4e0 });
-    this.hills = hills(s, { z: 1250, x: -200, size: 1800, height: 260 });
-    palms(s, 110, 170, 520, 0.9, (x, z) => Math.hypot(x - 30, z - 110) > 60);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(30, 0.1, 320), new THREE.MeshStandardMaterial({ color: 0x35332c, roughness: 1 }));
-    strip.position.set(42, 0.05, 110); strip.rotation.y = 0.3; s.add(strip);
+    // the airfield sits in a clearing; nothing grows on the strip, the camp, the trench or round the plane
+    const strip0 = new V(42 - Math.sin(0.3) * 165, 0, 110 - Math.cos(0.3) * 165), strip1 = new V(42 + Math.sin(0.3) * 165, 0, 110 + Math.cos(0.3) * 165);
+    this.island = makeIsland(s, {
+      lite: game.lite,
+      keepClear: (x, z) => toSegment(x, z, strip0.x, strip0.z, strip1.x, strip1.z) < 27 || Math.hypot(x + 40, z - 78) < 48 || Math.hypot(x, z) < 24 || Math.hypot(x - ZERO.x, z - ZERO.z) < 24 || Math.hypot(x - GOAL.x, z - GOAL.z) < 9,
+    });
+    const H = (this.H = this.island.height);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(30, 0.1, 320), new THREE.MeshStandardMaterial({ color: 0x6b6352, roughness: 1 })); strip.receiveShadow = true;
+    strip.position.set(42, H(42, 110) + 0.05, 110); strip.rotation.y = 0.3; s.add(strip);
     const tentM = new THREE.MeshStandardMaterial({ color: 0x6b6a45, roughness: 1, flatShading: true });
-    this.tents = [[-30, 60], [-48, 78], [-22, 86], [-58, 52], [-40, 100]].map(([x, z]) => { const t = new THREE.Mesh(new THREE.ConeGeometry(5, 4.5, 4), tentM); t.position.set(x, 2.2, z); t.rotation.y = Math.random(); s.add(t); return t; });
-    const trench = new THREE.Mesh(new THREE.BoxGeometry(26, 0.2, 4), new THREE.MeshStandardMaterial({ color: 0x1c1a14 })); trench.position.set(0, 0.06, -3); s.add(trench);
+    this.tents = [[-30, 60], [-48, 78], [-22, 86], [-58, 52], [-40, 100]].map(([x, z]) => { const t = new THREE.Mesh(new THREE.ConeGeometry(5, 4.5, 4), tentM); t.position.set(x, H(x, z) + 2.2, z); t.rotation.y = Math.random(); s.add(t); return t; });
+    const trench = new THREE.Mesh(new THREE.BoxGeometry(26, 0.2, 4), new THREE.MeshStandardMaterial({ color: 0x1c1a14 })); trench.position.set(0, H(0, -3) + 0.06, -3); s.add(trench);
     this.fire = new THREE.PointLight(0xff8a3a, 0, 220, 1.3); this.fire.position.set(-38, 8, 74); s.add(this.fire);
 
-    this.zero = makeZero(); this.zero.root.position.copy(ZERO); this.zeroYaw = Math.atan2(-65, -60); this.zero.root.rotation.y = this.zeroYaw; s.add(this.zero.root);
+    this.zero = makeZero(); this.zero.root.position.copy(ZERO).setY(H(ZERO.x, ZERO.z)); this.zeroYaw = Math.atan2(-65, -60); this.zero.root.rotation.y = this.zeroYaw; s.add(this.zero.root);
     this.g = makeGodzilla({ lightScale: 0.2 }); this.g.root.scale.setScalar(1.6); s.add(this.g.root);
     this.G = { pos: new V(-85, 0, 125), yaw: 2.4, wp: 0, stepT: 0, speed: 0, lungeT: 2.5, lunge: null };
-    this.soldiers = [[-6, -3], [5, -3.5], [10, -2.5]].map(([x, z]) => { const p = makeSoldier(); p.root.position.set(x, -0.5, z); p.root.rotation.y = 0.2; s.add(p.root); return p; });
-    this.w = new Walker(s, makeKoichi(), 0, 0);
+    this.soldiers = [[-6, -3], [5, -3.5], [10, -2.5]].map(([x, z]) => { const p = makeSoldier(); p.root.position.set(x, H(x, z) - 0.5, z); p.root.rotation.y = 0.2; s.add(p.root); return p; });
+    this.w = new Walker(s, makeKoichi(), 0, 0); this.w.ground = H;
     this.beacon = beacon(s, ZERO.x, ZERO.z);
     this.audio.music('dread');
     if (this.cp >= 1) this.startRun(); else this.startReach();
@@ -142,13 +149,12 @@ export class Ch1 extends StoryScene {
     }
 
     // Godzilla presentation
-    g.root.position.set(G.pos.x, 0, G.pos.z); g.root.rotation.y = G.yaw;
+    g.root.position.set(G.pos.x, this.H(G.pos.x, G.pos.z), G.pos.z); g.root.rotation.y = G.yaw;
     g.set.walk = G.speed > 0 ? Math.min(1, G.speed / 9) : 0;
     g.update(dt);
     if (G.speed > 0) { G.stepT -= dt; if (G.stepT <= 0) { G.stepT = 0.55; const k = clamp(1 - dP / 160, 0.1, 1); this.audio.step(0.5 * k); this.fx.shake(0.5 * k); } }
     this.beacon.material.opacity = 0.25 + Math.sin(this.t * 4) * 0.1;
     this.focus.copy(w.pos);
-    this.hills.update(this.camera);
     this.ocean.update(dt, this.camera);
     if (this.phase !== 'cockpit') this.ui.meter('Stamina', w.stamina, '#e9c46a'); else this.ui.meter(null);
   }

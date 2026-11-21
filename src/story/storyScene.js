@@ -59,12 +59,14 @@ export class Walker {
     }
     this.sync(dt);
   }
-  sync(dt) { this.p.root.position.copy(this.pos); this.p.root.rotation.y = this.yaw; this.p.update(dt, this.speed); }
+  // set .ground = (x, z) => height to walk on uneven land
+  sync(dt) { if (this.ground) this.pos.y = this.ground(this.pos.x, this.pos.z); this.p.root.position.copy(this.pos); this.p.root.rotation.y = this.yaw; this.p.update(dt, this.speed); }
   cam(camera, dt, dist = 11, h = 5, snap = false) {
     const s = Math.sin(this.camYaw), c = Math.cos(this.camYaw);
-    _a.set(this.pos.x - s * dist, h, this.pos.z - c * dist);
+    _a.set(this.pos.x - s * dist, this.pos.y + h, this.pos.z - c * dist);
+    if (this.ground) _a.y = Math.max(_a.y, this.ground(_a.x, _a.z) + 1.6);
     if (snap) camera.position.copy(_a); else camera.position.lerp(_a, 1 - Math.exp(-6 * dt));
-    camera.lookAt(this.pos.x + s * 5, 2.2, this.pos.z + c * 5);
+    camera.lookAt(this.pos.x + s * 5, this.pos.y + 2.2, this.pos.z + c * 5);
   }
 }
 

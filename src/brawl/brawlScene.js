@@ -1,13 +1,12 @@
 import * as THREE from 'three/webgpu';
 import { GameScene, clamp, damp, turnToward, segDist } from '../core/scene.js';
 import { Beam } from '../core/fx.js';
-import { setupSky, ground } from '../world/sky.js';
+import { setupSky } from '../world/sky.js';
 import { Ocean } from '../world/ocean.js';
 import { generatedCity } from '../world/city.js';
-import { palms, hills } from '../world/props.js';
 import { makeGodzilla } from '../models/godzilla.js';
 import { makeWarship } from '../models/vehicles.js';
-import { RIVALS, LADDER } from './roster.js';
+import { RIVALS, LADDER, ARENAS } from './roster.js';
 import { Bot } from './bot.js';
 
 const V = THREE.Vector3;
@@ -28,7 +27,7 @@ const COMBO = ['claw1', 'claw2', 'bite'];
 export class BrawlScene extends GameScene {
   constructor(game, opts) {
     super(game, opts);
-    this.key = opts.rival; this.cfg = RIVALS[this.key]; this.arena = opts.arena || this.cfg.arena;
+    this.key = opts.rival; this.cfg = RIVALS[this.key]; this.arena = ARENAS[opts.arena] ? opts.arena : this.cfg.arena;
     this.diff = opts.diff ?? LADDER.indexOf(this.key);
     this.gy = this.arena === 'bay' ? -15 : 0;
     this.buildArena();
@@ -68,20 +67,13 @@ export class BrawlScene extends GameScene {
       this.sky = setupSky(s, 'night', { near: 200, far: 1500, sunI: 4.2, amb: 2.2, env: 3, bot: 0x33405e, shadow: 280 }, this.game.renderer);
       this.city = generatedCity(s, { interiors: this.game.lite ? false : 'average', clear: (x, z) => Math.hypot(x, z) < 60 || (Math.abs(x) < 20 && Math.abs(z) < 140) });
       this.arenaR = this.city.radius - 14;
-    } else if (this.arena === 'bay') {
+    } else {
       this.sky = setupSky(s, 'storm', { shadow: 260 }, this.game.renderer);
       this.ocean = new Ocean(s, { amp: 1.5, deep: 0x0a2230, shallow: 0x3a6c7c });
       for (let i = 0; i < 4; i++) {
         const w = makeWarship(70), a = i * 1.6 + 0.5;
         w.root.position.set(Math.cos(a) * 420, 0, Math.sin(a) * 420); w.root.rotation.y = a; s.add(w.root);
       }
-    } else {
-      this.sky = setupSky(s, 'dusk', { far: 1900, shadow: 260 }, this.game.renderer);
-      ground(s, 0x9c8a62, 430);
-      ground(s, 0x55693a, 250, 0.1);
-      this.ocean = new Ocean(s, { y: -4, amp: 0.8, deep: 0x1a2c44, shallow: 0x7a6a78, sunCol: 0xffb072, sunDir: [-0.7, 0.35, -0.5] });
-      palms(s, 90, 150, 400, 1);
-      this.hills = hills(s, { z: -1500, x: 300, size: 2200, height: 330, seed: 9 });
     }
   }
 
@@ -557,7 +549,6 @@ export class BrawlScene extends GameScene {
     this.focus.set((P.pos.x + R.pos.x) / 2, this.gy, (P.pos.z + R.pos.z) / 2);
     if (this.ocean) this.ocean.update(dt, this.camera);
     if (this.city) this.city.update(dt);
-    if (this.hills) this.hills.update(this.camera);
     if (this.arena === 'bay' && Math.random() < 0.3) { this.fx.splash(_a.set(P.pos.x + (Math.random() - 0.5) * 24, 1, P.pos.z + (Math.random() - 0.5) * 24), 0.8); if (R.alt < 10) this.fx.splash(_a.set(R.pos.x + (Math.random() - 0.5) * 30, 1, R.pos.z + (Math.random() - 0.5) * 30), 0.8); }
 
     this.vig = Math.max(0, this.vig - (this.realDt || dt) * 2.4); this.ui.vignette(this.vig);
