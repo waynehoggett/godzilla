@@ -24,7 +24,7 @@ export class GameScene {
     this.t += dt;
     for (let i = this.timers.length - 1; i >= 0; i--) if (this.timers[i].t <= this.t) this.timers.splice(i, 1)[0].fn();
     this.update(dt);
-    this.fx.update(dt);
+    this.fx.update(dt, this.camera);
     if (this.sky) this.sky.follow(this.camera, this.focus);
     this.fx.applyShake(this.camera);
   }
