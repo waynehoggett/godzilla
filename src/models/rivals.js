@@ -6,8 +6,6 @@ import { makeRig, turnBone, AX } from './rig.js';
 //   id: [clip, start, end, speed, seconds until the blow lands, speed after the blow]
 // The brawl reads these to time its telegraphs, so what you see is what hits you.
 
-const _q = new THREE.Quaternion();
-
 function rival(key, cfg) {
   const rig = makeRig(key, cfg);
   const B = rig.bones(cfg.bones || {});
@@ -104,17 +102,19 @@ export function makeRodan() {
   const rig = makeRig('rodan', { height: 8.2, pelvis: 'bod_', doubleSided: true });
   const hide = volcanicHide();
   rig.model.traverse((m) => { if (m.isMesh && !m.material.map) { hide.normalMap = m.material.normalMap; m.material = hide; } });
-  const names = {};
-  for (const s of ['l', 'r']) for (const i of ['001', '002', '003', '010', '013', '016']) names[`w${s}${i}`] = `wing_${s}.${i}`;
-  const B = rig.bones({ ...names, neck: 'neck_', neck1: 'neck.001', neck2: 'neck.002', head: 'head_', jaw: 'jaw_', spine: 'spine_', tail: 'tail_', tail1: 'tail.001', tail2: 'tail.002', legL: 'leg_l_', legR: 'leg_r_' });
-  // which side each wing is on (bone names are not a reliable guide to handedness)
+  // Bone names as the loader delivers them (it strips the dots: "wing_l.001" arrives as "wing_l001").
+  // Wing chain: shoulder 001 -> 002 -> elbow 003 -> wrist 008 -> outer wing 004 -> 006 -> 005 -> tip 007.
+  const find = (prefix) => rig.bones({ b: prefix }).b;
+  const wing = (s) => ({ shoulder: find(`wing_${s}001`), upper: find(`wing_${s}002`), elbow: find(`wing_${s}003`), wrist: find(`wing_${s}008`), outer: [find(`wing_${s}004`), find(`wing_${s}006`), find(`wing_${s}005`)] });
+  const B = { neck: [find('neck_'), find('neck001'), find('neck002')], head: find('head_'), jaw: find('jaw_'), spine: [find('spine_'), find('spine002'), find('spine001'), find('spine003')], tail: [find('tail_'), find('tail002'), find('tail001'), find('tail003')], legs: [find('leg_l_'), find('leg_r_')] };
   rig.root.updateMatrixWorld(true);
-  const side = (b) => (b ? Math.sign(rig.root.worldToLocal(b.getWorldPosition(new THREE.Vector3())).x) || 1 : 1);
-  const wings = [['wl001', 'wl002', 'wl003', ['wl010', 'wl013', 'wl016']], ['wr001', 'wr002', 'wr003', ['wr010', 'wr013', 'wr016']]].map(([a, b, c, f]) => ({ a: B[a], b: B[b], c: B[c], fingers: f.map((n) => B[n]), s: side(B[c] || B[a]) }));
+  const sideOf = (b) => Math.sign(rig.root.worldToLocal(b.getWorldPosition(new THREE.Vector3())).x) || 1;
+  const wings = ['l', 'r'].map((s) => { const w = wing(s); w.s = sideOf(w.elbow); return w; });
+  for (const w of wings) for (const k of ['shoulder', 'upper', 'elbow', 'wrist']) if (!w[k]) console.error('rodan: wing bone missing:', k);
   const rest = new Map();
   rig.model.traverse((o) => { if (o.isBone) rest.set(o, o.quaternion.clone()); });
 
-  // set.fly 1 = level flight, 0 = standing; set.flap wing-beat strength; set.dive pulls the wings in
+  // set.fly 1 = level flight, 0 = standing; set.flap wing-beat strength; set.dive tucks the wings
   const set = { fly: 1, flap: 1, dive: 0, walk: 0, speed: 0, charge: 0, hurt: 0, jaw: 0 };
   const moves = { dive: 1.15, gust: 0.75, peck: 0.55 };
   let t = Math.random() * 6, flash = 0, fly = 1, dive = 0;
@@ -122,30 +122,41 @@ export function makeRodan() {
   const api = {
     root: rig.root, rig, set, height: 8.2, radius: 3.0, bones: B, moves,
     update(dt) {
-      t += dt * (5.2 + set.flap * 2.4);
+      t += dt * (4.6 + set.flap * 2.2);
       fly += (set.fly - fly) * Math.min(1, dt * 4); dive += (set.dive - dive) * Math.min(1, dt * 8);
       for (const [b, q] of rest) b.quaternion.copy(q);
-      // body: upright when standing, laid forward in flight, nose down in a dive
-      rig.tilt.rotation.x = fly * 1.32 + dive * 0.5 - set.hurt * 0.2;
-      rig.tilt.position.y = rig.fit.hipY + Math.sin(t - 0.9) * 0.3 * fly * (1 - dive);
+      // The rig stands upright with its wings spread in front of it like a cloak. Laying the body
+      // forward turns that into level flight: the spine (Y) points ahead and the wings lie flat.
+      const beat = Math.sin(t), amp = set.flap * (1 - dive * 0.8);
+      rig.tilt.rotation.x = fly * 1.34 + dive * 0.45 - set.hurt * 0.2;
+      rig.tilt.position.y = rig.fit.hipY - beat * 0.32 * fly * amp; // the body rises on the down-stroke
       rig.root.updateMatrixWorld(true);
       rig.tilt.getWorldQuaternion(rootQ);
-      const beat = Math.sin(t), lag = Math.sin(t - 0.8), amp = set.flap * (1 - dive * 0.85) * (0.35 + fly * 0.3);
+      const Y = AX.y, Z = AX.z, X = AX.x;
       for (const W of wings) {
-        // spread flat in flight, swept back and half folded on the ground or in a dive
-        const fold = (1 - fly) * 0.9 + dive * 0.75;
-        turnBone(W.a, rootQ, AX.z, W.s * (beat * amp + 0.08 - fold * 0.5));
-        turnBone(W.a, rootQ, AX.y, W.s * -fold * 0.9);
-        turnBone(W.b, rootQ, AX.z, W.s * (lag * amp * 0.7 - fold * 0.35));
-        turnBone(W.c, rootQ, AX.z, W.s * (Math.sin(t - 1.5) * amp * 0.6));
-        for (const f of W.fingers) turnBone(f, rootQ, AX.y, W.s * -fold * 0.5);
+        const s = W.s;
+        // up and down stroke: about the spine axis, each joint lagging the one before so the tip whips
+        const stroke = (lag, k) => s * (Math.sin(t - lag) * k * amp) * (0.25 + fly * 0.75);
+        turnBone(W.shoulder, rootQ, Y, stroke(0, 0.42) + s * 0.1 * fly);
+        turnBone(W.upper, rootQ, Y, stroke(0.25, 0.3));
+        turnBone(W.elbow, rootQ, Y, stroke(0.55, 0.3));
+        turnBone(W.wrist, rootQ, Y, stroke(0.85, 0.34));
+        W.outer.forEach((b, i) => turnBone(b, rootQ, Y, stroke(1.1 + i * 0.25, 0.26)));
+        // open the outer wing wider in flight; sweep everything back in a dive; half-fold on the ground
+        const open = fly * 0.2 * (1 - dive), sweep = dive * 0.55 + (1 - fly) * 0.12;
+        W.outer.forEach((b) => turnBone(b, rootQ, Z, s * (open - sweep * 0.5)));
+        turnBone(W.shoulder, rootQ, Z, -s * sweep); turnBone(W.elbow, rootQ, Z, -s * sweep * 0.7);
+        // the wrist folds a little on the up-stroke, like a real wing
+        turnBone(W.wrist, rootQ, Z, -s * Math.max(0, beat) * 0.18 * amp * fly);
       }
-      // in flight the head looks ahead instead of at the sky; the tail trails
-      for (const b of [B.neck, B.neck1, B.neck2, B.head]) turnBone(b, rootQ, AX.x, -fly * 0.3 + Math.sin(t * 0.5) * 0.02);
-      turnBone(B.jaw, rootQ, AX.x, set.jaw * 0.45);
-      for (const b of [B.tail, B.tail1, B.tail2]) turnBone(b, rootQ, AX.x, Math.sin(t - 2) * 0.05 * fly);
-      for (const b of [B.legL, B.legR]) turnBone(b, rootQ, AX.x, fly * 0.9);
-      hide.emissive.setRGB(Math.max(0, flash) * 0.55, Math.max(0, flash) * 0.14, Math.max(0, flash) * 0.08);
+      // head looks where it is going instead of at the sky; tail and legs trail
+      B.neck.forEach((b) => turnBone(b, rootQ, X, -fly * 0.36 + Math.sin(t - 1.2) * 0.03 * amp));
+      turnBone(B.head, rootQ, X, -fly * 0.3);
+      turnBone(B.jaw, rootQ, X, set.jaw * 0.45);
+      B.spine.forEach((b, i) => turnBone(b, rootQ, X, Math.sin(t - 0.4 - i * 0.2) * 0.025 * amp * fly));
+      B.tail.forEach((b, i) => turnBone(b, rootQ, X, Math.sin(t - 1.6 - i * 0.4) * 0.07 * fly));
+      B.legs.forEach((b) => turnBone(b, rootQ, X, fly * 0.8));
+      const f = Math.max(0, flash); hide.emissive.setRGB(f * 0.55, f * 0.14, f * 0.08);
     },
     move(id) { const hit = moves[id] ?? 0.6; return { hit, total: hit + 0.6 }; },
     landed() {}, stop() {},
@@ -153,6 +164,5 @@ export function makeRodan() {
     mouths: () => [(B.jaw || B.head).getWorldPosition(new THREE.Vector3())],
     flash(k) { flash = k; },
   };
-  rig.root.getWorldQuaternion(_q);
   return api;
 }

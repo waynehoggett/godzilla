@@ -42,8 +42,10 @@ export function makeRig(key, cfg) {
     if (!m.material.emissiveMap && m.material.emissive) mats.push(m.material);
   });
   const mixer = new THREE.AnimationMixer(model), acts = {};
-  for (const c of src.animations) acts[c.name] = mixer.clipAction(c);
+  // clips are addressed by their short name ("idle"), whatever prefix the exporter added ("Skeleton|idle")
+  for (const c of src.animations) acts[c.name.split('|').pop()] = mixer.clipAction(c);
   const idle = acts[cfg.idle], walk = acts[cfg.walk];
+  for (const n of [cfg.idle, cfg.walk]) if (n && !acts[n]) console.error(`rig "${key}": clip "${n}" not found; has ${Object.keys(acts).join(', ')}`);
   if (idle) { idle.play(); idle.setEffectiveWeight(1); }
   if (walk) { walk.play(); walk.setEffectiveWeight(0); }
   mixer.update(0); model.updateMatrixWorld(true);
@@ -67,7 +69,7 @@ export function makeRig(key, cfg) {
     // Play a clip (or a window of it) once, cross-fading from whatever is playing.
     act(name, o = {}) {
       const a = acts[name];
-      if (!a) return 0;
+      if (!a) { console.error(`rig "${key}": clip "${name}" not found`); return 0; }
       const speed = o.speed ?? 1, start = o.start ?? 0, end = o.end ?? a.getClip().duration, fade = o.fade ?? 0.12;
       if (shot && shot.a !== a) shot.a.fadeOut(fade);
       a.reset(); a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; a.timeScale = speed; a.time = start; a.setEffectiveWeight(1);
