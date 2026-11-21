@@ -24,7 +24,9 @@ export class Input {
     this.aimTouch = null;
     this.onPause = null;
 
+    const typing = (e) => e.target && /^(TEXTAREA|INPUT|SELECT)$/.test(e.target.tagName);
     addEventListener('keydown', (e) => {
+      if (typing(e)) return;
       if (e.code === 'Escape' || e.code === 'KeyP') { this.onPause && this.onPause(); return; }
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       this.keys.add(e.code);

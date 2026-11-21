@@ -8,7 +8,7 @@ export class UI {
     this.skipCards = new URLSearchParams(location.search).has('skip');
     this.subT = 0; this.bannerT = 0; this.menuOpen = false;
     addEventListener('keydown', (e) => {
-      if (!this.menuOpen) return;
+      if (!this.menuOpen || /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
       const btns = [...$('screen').querySelectorAll('button:not(:disabled)')];
       const i = btns.indexOf(document.activeElement);
       if (e.code === 'ArrowDown' || e.code === 'ArrowRight') { btns[(i + 1) % btns.length]?.focus(); e.preventDefault(); }
@@ -170,6 +170,38 @@ export class UI {
     el.scrollTop = 0;
     this.menuOpen = true;
     if (first && !this.input.isTouch) first.focus();
+  }
+
+  // Feedback form. opts: { context: {k: v}, send(payload) -> Promise<{ok, error?}>, done() }
+  feedback(opts) {
+    const el = $('screen'), esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    el.innerHTML = `<h1>Send feedback</h1>
+      <div class="sub plain">Tell us what broke, what felt off, or what you would like to see.</div>
+      <form class="fb" novalidate>
+        <div class="fbcat">
+          <label><input type="radio" name="cat" value="bug" checked><span>Something broke</span></label>
+          <label><input type="radio" name="cat" value="idea"><span>Idea</span></label>
+          <label><input type="radio" name="cat" value="other"><span>Other</span></label>
+        </div>
+        <textarea name="message" maxlength="2000" rows="6" placeholder="What happened? What did you expect?"></textarea>
+        <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <details><summary>What is sent with your message</summary><pre>${Object.entries(opts.context).map(([k, v]) => esc(k + ': ' + v)).join('\n')}</pre><p>No name, email or location is collected.</p></details>
+        <div class="fbstatus" role="status"></div>
+        <div class="fbrow"><button type="submit">Send</button><button type="button" class="back">Cancel</button></div>
+      </form>`;
+    const form = el.querySelector('form'), status = el.querySelector('.fbstatus'), text = form.message, sendBtn = form.querySelector('[type=submit]');
+    form.querySelector('.back').addEventListener('click', () => { this.audio.click(); opts.done(); });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = text.value.trim();
+      if (message.length < 5) { status.textContent = 'Please write a little more.'; text.focus(); return; }
+      sendBtn.disabled = true; status.textContent = 'Sending…';
+      const r = await opts.send({ category: form.cat.value, message, website: form.website.value, context: opts.context });
+      if (r.ok) { status.textContent = 'Thank you — your feedback was sent.'; setTimeout(() => opts.done(), 1400); }
+      else { status.textContent = r.error || 'Could not send. Please try again.'; sendBtn.disabled = false; }
+    });
+    el.classList.remove('hidden'); el.scrollTop = 0; this.menuOpen = true;
+    text.focus();
   }
 
   closeMenu() { $('screen').classList.add('hidden'); this.menuOpen = false; }

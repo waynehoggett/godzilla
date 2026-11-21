@@ -112,6 +112,7 @@ class Game {
         { label: 'Story Mode', small: 'You are Koichi Shikishima. Odo Island to Sagami Bay, 1945–1947.', go: () => this.showStory() },
         { label: 'Kaiju Brawl', small: 'You are Godzilla. Fight Rodan, Mothra, King Kong, Mechagodzilla and King Ghidorah.', go: () => this.showBrawl() },
         { label: 'How to Play', go: () => this.showHelp() },
+        { label: 'Send Feedback', small: 'Report a bug or tell us what you think.', go: () => this.showFeedback(() => this.showMain()) },
         { label: 'Sound: ' + (this.audio.muted ? 'Off' : 'On'), go: () => { this.toggleSound(); this.showMain(); } },
         { label: 'Graphics: ' + (this.lite ? 'Low' : 'High'), small: 'Low turns off bloom and shadows and renders at lower resolution.', go: () => { this.save.set('lite', !this.lite); this.setGraphics(!this.lite); this.toMenu(); } },
       ],
@@ -124,6 +125,32 @@ class Game {
     this.renderer.shadowMap.enabled = !this.lite;
     this.renderer.setPixelRatio(this.lite ? Math.min(devicePixelRatio || 1, 1) * 0.6 : Math.min(devicePixelRatio || 1, 1.5));
     if (this.current) this.resize();
+  }
+  // What the feedback form attaches: where the player is and what they are running. Nothing personal.
+  feedbackContext() {
+    const s = this.current, c = { mode: this.mode, graphics: this.lite ? 'low' : 'high', renderer: this.renderer.backend.isWebGPUBackend ? 'WebGPU' : 'WebGL 2' };
+    if (this.mode === 'story') c.chapter = `${this.chapter + 1} ${CHAPTERS[this.chapter].title}`;
+    if (this.mode === 'brawl' && s) { c.rival = s.key; c.arena = s.arena; }
+    if (s && s.phase) c.phase = s.phase;
+    if (s && this.mode !== 'menu') c.time = s.t.toFixed(0) + 's';
+    c.viewport = `${innerWidth}x${innerHeight} @${(devicePixelRatio || 1).toFixed(1)}`;
+    c.touch = this.input.isTouch ? 'yes' : 'no';
+    c.userAgent = navigator.userAgent;
+    c.build = typeof __BUILD__ === 'string' ? __BUILD__ : 'dev';
+    return c;
+  }
+  showFeedback(done) {
+    this.input.clear();
+    this.ui.feedback({
+      context: this.feedbackContext(), done,
+      send: async (payload) => {
+        try {
+          const r = await fetch('/api/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+          const j = await r.json().catch(() => ({}));
+          return r.ok && j.ok ? { ok: true } : { ok: false, error: j.error || 'Could not send (the feedback service is not reachable here).' };
+        } catch { return { ok: false, error: 'Could not send. Check your connection and try again.' }; }
+      },
+    });
   }
   toggleSound() { this.audio.setMuted(!this.audio.muted); this.save.set('muted', this.audio.muted); }
   showHelp() {
@@ -223,6 +250,7 @@ class Game {
         { label: 'Resume', go: () => this.togglePause() },
         { label: story ? 'Restart chapter' : 'Restart fight', go: close(() => (story ? this.startChapter(this.chapter, { skipIntro: true }) : this.startBrawl(this.current.key, this.ladder, this.current.opts.arena, this.current.opts.hp))) },
         { label: story ? 'Switch to Kaiju Brawl' : 'Switch to Story Mode', small: story ? 'Play as Godzilla. Your story progress is kept.' : 'Play as Koichi.', go: close(() => this.toMenu(story ? 'brawl' : 'story')) },
+        { label: 'Send feedback', small: 'Report a bug or tell us what you think.', go: () => this.showFeedback(() => { this.pauseOpen = false; this.paused = false; this.togglePause(); }) },
         { label: 'Sound: ' + (this.audio.muted ? 'Off' : 'On'), go: () => { this.toggleSound(); this.pauseOpen = false; this.paused = false; this.togglePause(); } },
         { label: 'Main menu', go: close(() => this.toMenu()) },
       ],
