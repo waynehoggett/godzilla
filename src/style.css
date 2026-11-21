@@ -174,3 +174,14 @@ body.touch #hint { display: none; }
 .fbstatus { min-height: 20px; font-size: 14px; color: #e9c46a; text-align: center; }
 .fbrow { display: flex; gap: 10px; }
 .fbrow button { flex: 1; text-align: center !important; }
+
+/* health bars: a pale bar trails behind the real one so each hit reads */
+.bar { position: relative; }
+.bar u { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; background: #f6e7b8; transition: width .55s ease-out .32s; }
+.bar i { position: relative; }
+.barwrap.right .bar u { left: auto; right: 0; }
+.bar.en u { display: none; }
+#combo { position: absolute; top: 26%; right: 24px; font-family: var(--serif); font-size: clamp(20px, 3.6vw, 40px); letter-spacing: .14em; color: #f6e7b8; text-shadow: 0 0 14px rgba(255,160,60,.8), 0 2px 4px #000; }
+#combo:empty { display: none; }
+#combo.pop { animation: combopop .22s ease-out; }
+@keyframes combopop { from { transform: scale(1.5); } to { transform: scale(1); } }

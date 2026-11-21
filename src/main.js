@@ -4,7 +4,7 @@ import { Input } from './core/input.js';
 import { AudioSys } from './core/audio.js';
 import { UI } from './core/ui.js';
 import { Save } from './core/save.js';
-import { loadAssets } from './core/assets.js';
+import { loadAssets, need } from './core/assets.js';
 import { MenuScene } from './menuScene.js';
 import { ViewerScene } from './viewerScene.js';
 import { GlbView } from './glbView.js';
@@ -66,7 +66,7 @@ class Game {
   }
 
   // Fade out, tear down the current scene, optionally show story cards, then build the next scene.
-  async swap(make, cards) {
+  async swap(make, cards, prepare) {
     if (this.busy) return;
     this.busy = true;
     this.ui.closeMenu();
@@ -81,6 +81,7 @@ class Game {
       await this.ui.fade(true);
       this.ui.hideCards();
     }
+    if (prepare) await prepare(); // e.g. fetch a rival's model while the screen is dark
     this.current = make();
     this.resize();
     this.input.update();
@@ -92,7 +93,7 @@ class Game {
   boot() {
     const q = new URLSearchParams(location.search), sc = q.get('scene');
     if (sc === 'glb') return this.swap(() => new GlbView(this, q));
-    if (sc === 'view') return this.swap(() => new ViewerScene(this, q));
+    if (sc === 'view') return this.swap(() => new ViewerScene(this, q), null, () => need(q.get('m')));
     if (sc === 'brawl') return this.startBrawl(q.get('rival') || 'rodan', false, q.get('arena'));
     const i = CHAPTERS.findIndex((c) => c.id === sc);
     if (i >= 0) return this.startChapter(i, { skipIntro: true, checkpoint: +(q.get('cp') || 0) });
@@ -110,7 +111,7 @@ class Game {
       title: 'GODZILLA<br><em>MINUS ONE</em>', sub: 'An unofficial fan game',
       items: [
         { label: 'Story Mode', small: 'You are Koichi Shikishima. Odo Island to Sagami Bay, 1945–1947.', go: () => this.showStory() },
-        { label: 'Kaiju Brawl', small: 'You are Godzilla. Fight Rodan, Mothra, King Kong, Mechagodzilla and King Ghidorah.', go: () => this.showBrawl() },
+        { label: 'Kaiju Brawl', small: 'You are Godzilla. Fight Rodan, King Kong, Mechagodzilla and King Ghidorah.', go: () => this.showBrawl() },
         { label: 'How to Play', go: () => this.showHelp() },
         { label: 'Send Feedback', small: 'Report a bug or tell us what you think.', go: () => this.showFeedback(() => this.showMain()) },
         { label: 'Sound: ' + (this.audio.muted ? 'Off' : 'On'), go: () => { this.toggleSound(); this.showMain(); } },
@@ -181,7 +182,7 @@ class Game {
   }
   showBrawl() {
     const beat = this.save.data.brawl, arenaName = this.arena ? ARENAS[this.arena].name : 'Rival\'s home ground';
-    const items = [{ label: 'Ladder' + (this.save.data.ladder ? ' ✓' : ''), small: 'All five rivals in a row. Some health carries over.', go: () => this.startBrawl(LADDER[0], true) }];
+    const items = [{ label: 'Ladder' + (this.save.data.ladder ? ' ✓' : ''), small: 'All four rivals in a row. Some health carries over.', go: () => this.startBrawl(LADDER[0], true) }];
     for (const k of LADDER) items.push({ label: RIVALS[k].name + (beat[k] ? ' ✓' : ''), small: RIVALS[k].tag, go: () => this.startBrawl(k, false, this.arena) });
     items.push({ label: 'Arena: ' + arenaName, small: 'Tap to change', go: () => { const ks = [null, ...Object.keys(ARENAS)]; this.arena = ks[(ks.indexOf(this.arena) + 1) % ks.length]; this.showBrawl(); } });
     items.push({ label: 'Back', back: true, go: () => this.showMain() });
@@ -216,7 +217,7 @@ class Game {
   // ---------- brawl ----------
   async startBrawl(rival, ladder = false, arena = null, hp) {
     this.mode = 'brawl'; this.ladder = ladder;
-    await this.swap(() => new BrawlScene(this, { rival, arena: arena || undefined, hp, diff: ladder ? LADDER.indexOf(rival) : undefined }));
+    await this.swap(() => new BrawlScene(this, { rival, arena: arena || undefined, hp, diff: ladder ? LADDER.indexOf(rival) : undefined }), null, () => need(rival));
   }
   brawlOver(scene, won) {
     const k = scene.key, name = RIVALS[k].name, i = LADDER.indexOf(k);

@@ -66,6 +66,14 @@ export class AudioSys {
     this.noise(d, Math.min(1, 0.6 * size), 1400, 30); this.tone('sine', 95, 22, d, Math.min(1, 0.9 * size));
     this.noise(0.12, 0.4 * size, 5000, 800, 'highpass');
   }
+  // A blow landing: body thud, low boom and a sharp crack, scaled by power 1..4.
+  impact(power = 1) {
+    const v = Math.min(1, 0.45 + power * 0.18);
+    this.tone('sine', 150, 34, 0.3 + power * 0.06, v); this.noise(0.25, v * 0.6, 1200, 80);
+    this.noise(0.07, v * 0.55, 6000, 1800, 'highpass'); this.tone('triangle', 420, 90, 0.12, v * 0.35);
+    if (power >= 2.5) this.tone('sine', 70, 22, 0.8, 0.8);
+  }
+  block() { this.tone('triangle', 900, 420, 0.12, 0.3); this.noise(0.08, 0.3, 5000, 2500, 'bandpass', 0, 4); }
   splash(v = 1) { this.noise(0.7, 0.35 * v, 2600, 500, 'bandpass', 0, 0.5); }
   heartbeat() { this.tone('sine', 62, 38, 0.18, 0.9); this.tone('sine', 55, 34, 0.2, 0.7, 0.24); }
   alarm() { this.tone('square', 880, 880, 0.12, 0.1); this.tone('square', 660, 660, 0.12, 0.1, 0.16); }

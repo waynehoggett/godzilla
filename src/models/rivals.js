@@ -1,308 +1,158 @@
 import * as THREE from 'three/webgpu';
 import { positionLocal, color, mix, smoothstep, float, mx_worley_noise_float, mx_noise_float } from 'three/tsl';
-import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
-import { assets } from '../core/assets.js';
-import { part, pivot, findBones } from './godzilla.js';
+import { makeRig, turnBone, AX } from './rig.js';
 
-const coneGeo = new THREE.ConeGeometry(1, 1, 14);
-const eyeGeo = new THREE.SphereGeometry(1, 12, 8);
-const ball = new THREE.SphereGeometry(1, 28, 18);
-const hot = (c, k = 3) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k) }); // bright enough to bloom
+// Every rival is a rigged model (see CREDITS.md). Moves are windows of each rig's own clips:
+//   id: [clip, start, end, speed, seconds until the blow lands, speed after the blow]
+// The brawl reads these to time its telegraphs, so what you see is what hits you.
 
-// Smooth hide with a procedural scale pattern: c1 in the grooves, c2 on the scales.
-function hide(c1, c2, o = {}) {
-  const m = new THREE.MeshPhysicalNodeMaterial({ metalness: o.metal ?? 0, clearcoat: o.coat ?? 0.15, clearcoatRoughness: 0.5, sheen: o.sheen ?? 0, sheenRoughness: 0.6 });
-  if (o.sheen) m.sheenColor = new THREE.Color(o.sheenColor ?? 0xffffff);
-  const p = positionLocal.mul(o.scale ?? 7), cell = mx_worley_noise_float(p), blotch = mx_noise_float(positionLocal.mul(1.3)).mul(0.5).add(0.5);
-  const k = smoothstep(0.08, 0.45, cell);
-  m.colorNode = mix(color(c1), color(c2), k).mul(blotch.mul(0.35).add(0.72));
-  m.roughnessNode = mix(float((o.rough ?? 0.6) + 0.2), float(o.rough ?? 0.6), k);
-  if (o.side) m.side = o.side;
-  return m;
-}
-const _v = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 
-// Flat membrane from outline points [span, chord]; lies in the XZ plane, spanning +X.
-function membrane(pts, flip = false) {
-  const s = new THREE.Shape();
-  s.moveTo(pts[0][0], pts[0][1]);
-  for (const p of pts.slice(1)) s.lineTo(p[0], p[1]);
-  const g = new THREE.ShapeGeometry(s);
-  let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-  for (const [x, y] of pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
-  const uv = g.attributes.uv, p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) - minX) / (maxX - minX), (p.getY(i) - minY) / (maxY - minY));
-  if (!flip) g.rotateX(-Math.PI / 2);
-  return g;
-}
-
-// ---------------- RODAN ----------------
-export function makeRodan() {
-  const skin = hide(0x3a160c, 0x7a3a20, { rough: 0.55, scale: 8 });
-  const dark = hide(0x24100a, 0x4a2214, { rough: 0.6, scale: 8 });
-  const wingM = hide(0x4a2010, 0x9a5230, { rough: 0.5, scale: 3, side: THREE.DoubleSide });
-  const bone = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.45 });
-  const B = () => ball;
-  const root = new THREE.Group();
-  const body = pivot(root, 0, 3.2, 0);
-  part(body, B(1), skin, 0, 0, 0, 1.5, 1.35, 2.7);
-  part(body, B(2), dark, 0, -0.5, 0.5, 1.2, 0.9, 1.8);
-  for (let i = 0; i < 5; i++) { const c = part(body, coneGeo, bone, (i % 2 ? 0.35 : -0.35), -1.3, 1.6 - i * 0.6, 0.16, 0.55, 0.16); c.rotation.x = Math.PI; }
-  const neck = pivot(body, 0, 0.5, 2.2); neck.rotation.x = -0.45;
-  part(neck, B(3), skin, 0, 0, 0.8, 0.62, 0.62, 1.2);
-  const head = pivot(neck, 0, 0.1, 1.8); head.rotation.x = 0.45;
-  part(head, B(4), skin, 0, 0, 0.2, 0.62, 0.56, 0.85);
-  const beakU = part(head, coneGeo, bone, 0, 0, 1.6, 0.36, 1.9, 0.3); beakU.rotation.x = Math.PI / 2;
-  const jaw = pivot(head, 0, -0.25, 0.5);
-  const beakL = part(jaw, coneGeo, bone, 0, 0, 0.9, 0.26, 1.5, 0.16); beakL.rotation.x = Math.PI / 2;
-  for (const s of [1, -1]) { const c = part(head, coneGeo, skin, 0.3 * s, 0.5, -0.8, 0.2, 1.7, 0.2); c.rotation.x = -1.2; }
-  const eyeM = hot(0xffc040);
-  part(head, eyeGeo, eyeM, 0.5, 0.2, 0.5, 0.09); part(head, eyeGeo, eyeM, -0.5, 0.2, 0.5, 0.09);
-  const mouth = pivot(head, 0, -0.1, 2.4);
-  const tailP = part(body, coneGeo, skin, 0, 0.1, -3.4, 1.1, 2.4, 0.3); tailP.rotation.x = -Math.PI / 2;
-  const legs = [];
-  for (const s of [1, -1]) {
-    const hip = pivot(body, 0.8 * s, -0.8, -0.6);
-    part(hip, B(5), skin, 0, -0.9, 0, 0.5, 1.1, 0.55);
-    for (let i = -1; i <= 1; i++) { const c = part(hip, coneGeo, bone, i * 0.3, -2.0, 0.4, 0.1, 0.6, 0.1); c.rotation.x = Math.PI * 0.75; }
-    legs.push(hip);
-  }
-  const innerG = membrane([[0, 1.7], [6.2, 1.3], [6.2, -1.7], [3.2, -2.9], [0, -2.3]]);
-  const outerG = membrane([[0, 1.3], [7.4, 0.3], [5.4, -1.3], [2.6, -1.1], [0, -1.7]]);
-  const wings = [];
-  for (const s of [1, -1]) {
-    const inner = pivot(body, 1.1 * s, 0.6, 0.5); inner.scale.x = s;
-    part(inner, innerG, wingM);
-    const arm = part(inner, coneGeo, skin, 3.1, 0.05, 1.3, 0.3, 6.4, 0.3); arm.rotation.z = -Math.PI / 2;
-    const outer = pivot(inner, 6.2, 0, 0);
-    part(outer, outerG, wingM);
-    const arm2 = part(outer, coneGeo, skin, 3.6, 0.05, 0.9, 0.22, 7.4, 0.22); arm2.rotation.z = -Math.PI / 2;
-    wings.push({ inner, outer, s });
-  }
-  const set = { flap: 1, fold: 0, attack: 0, jaw: 0, walk: 0, charge: 0 };
-  let t = 0;
-  function update(dt) {
-    t += dt * (4 + set.flap * 3);
-    const f = set.fold, fl = set.flap * (1 - f);
-    body.rotation.x = -0.95 * f + set.attack * 0.6 * (1 - f) - Math.sin(t) * 0.03 * fl;
-    body.position.y = 3.2 + Math.sin(t - 0.8) * 0.5 * fl + f * 1.2;
-    neck.rotation.x = -0.45 + f * 0.9 + set.attack * 0.3;
-    jaw.rotation.x = set.jaw * 0.5;
-    for (const L of legs) L.rotation.x = f * 0.95;
-    for (const W of wings) {
-      // top-level pivots are mirrored with scale.x, so their rotations need the sign; children inherit it
-      W.inner.rotation.z = W.s * (Math.sin(t) * 0.55 * fl + 0.12 - f * 0.5);
-      W.inner.rotation.y = W.s * f * 1.1;
-      W.outer.rotation.z = Math.sin(t - 0.7) * 0.75 * fl - f * 0.3;
-      W.outer.rotation.y = f * 1.4;
-    }
-  }
-  return { root, set, update, height: 7, radius: 3.2, mouths: () => [mouth.getWorldPosition(_v).clone()], flash(k) { skin.emissive.setRGB(k, k * 0.3, k * 0.2); } };
+function rival(key, cfg) {
+  const rig = makeRig(key, cfg);
+  const B = rig.bones(cfg.bones || {});
+  const mouthBones = (cfg.mouths || []).map((p) => rig.bones({ m: p }).m).filter(Boolean);
+  const set = { walk: 0, speed: 0, charge: 0, hurt: 0 };
+  let flash = 0, lastMove = null, alt = 0;
+  const api = {
+    root: rig.root, rig, set, moves: cfg.moves, height: cfg.height, radius: cfg.radius ?? 2.8, bones: B,
+    update(dt) {
+      rig.loco(set.walk, set.speed);
+      rig.update(dt);
+      rig.tilt.rotation.x = -set.hurt * 0.16;
+      if (cfg.overlay) cfg.overlay(api, dt);
+      rig.flash(Math.max(0, flash));
+    },
+    // Start a move; returns { hit, total } in seconds (hit = when the blow lands).
+    move(id, speedMul = 1) {
+      let m = cfg.moves[id];
+      if (!m) return { hit: 0.4, total: 0.9 };
+      if (Array.isArray(m[0])) { m = m[(alt++) % m.length]; } // alternate between variants
+      lastMove = m;
+      const total = rig.act(m[0], { start: m[1], end: m[2], speed: m[3] * speedMul, hold: !!m[6] });
+      return { hit: m[4] / speedMul, total };
+    },
+    landed() { if (lastMove && lastMove[5]) rig.speed(lastMove[5]); },
+    react(kind) {
+      const r = cfg.reacts && cfg.reacts[kind];
+      if (r) rig.act(r[0], { start: r[1] ?? 0, end: r[2], speed: r[3] ?? 1, hold: kind === 'death', fade: 0.08 });
+      return !!r;
+    },
+    stop() { rig.stop(); },
+    mouths: () => mouthBones.map((b) => b.getWorldPosition(new THREE.Vector3())),
+    flash(k) { flash = k; },
+  };
+  return api;
 }
 
-// ---------------- MOTHRA ----------------
-function mothWingTexture() {
-  const c = document.createElement('canvas'); c.width = c.height = 256;
-  const g = c.getContext('2d');
-  const grad = g.createLinearGradient(0, 0, 256, 0);
-  grad.addColorStop(0, '#f2d27a'); grad.addColorStop(0.45, '#e8862a'); grad.addColorStop(1, '#b8421a');
-  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
-  g.strokeStyle = '#17110c'; g.lineWidth = 7;
-  for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(0, 128); g.quadraticCurveTo(120, 20 + i * 28, 256, i * 32); g.stroke(); }
-  const spot = (x, y, r) => { for (const [k, col] of [[1, '#17110c'], [0.78, '#f6efd8'], [0.55, '#2a7fd0'], [0.3, '#17110c']]) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r * k, 0, 7); g.fill(); } };
-  spot(150, 96, 44); spot(200, 190, 24);
-  g.lineWidth = 22; g.strokeRect(0, 0, 256, 256);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+// ---------------- KING KONG ----------------
+export function makeKong() {
+  return rival('kong', {
+    height: 9.4, radius: 2.8, idle: 'idle', walk: 'walk', stride: 4.56, slide: 0.9, pelvis: 'bip_pelvis', mouths: ['def_c_lipLwr01'],
+    moves: {
+      punch: [['attack2', 0, 1.42, 0.95, 0.44, 1.4], ['attack3', 0, 1.42, 0.95, 0.44, 1.4]],
+      leap: ['smash_char', 0, 2.38, 1.0, 0.75, 1.5],
+      boulders: ['throw', 0.2, 3.2, 1.9, 0.72, 2.2],
+      roar: ['roar', 0.5, 3.4, 1.6, 0.8, 1.6],
+    },
+    reacts: { death: ['ragdoll', 0, 0, 1] },
+  });
 }
-export function makeMothra() {
-  const fur = hide(0xcfc2a4, 0xf2ead6, { rough: 0.9, scale: 14, sheen: 1, coat: 0 });
-  const brown = hide(0x4a2a12, 0x8a5a2c, { rough: 0.9, scale: 14, sheen: 1, sheenColor: 0xffd9a0, coat: 0 });
-  const wingM = new THREE.MeshStandardMaterial({ map: mothWingTexture(), roughness: 0.8, side: THREE.DoubleSide, emissive: 0x402008, emissiveIntensity: 0.6 });
-  const eyeM = hot(0x2a90ff, 4);
-  const B = () => ball;
-  const root = new THREE.Group();
-  const body = pivot(root, 0, 3, 0);
-  part(body, B(1), fur, 0, 0, 0.4, 1.5, 1.4, 1.7);
-  part(body, B(2), fur, 0, 0.1, 2.2, 1.0, 0.95, 0.95);
-  part(body, eyeGeo, eyeM, 0.62, 0.35, 2.75, 0.42); part(body, eyeGeo, eyeM, -0.62, 0.35, 2.75, 0.42);
-  for (let i = 0; i < 5; i++) part(body, ball, i % 2 ? brown : fur, 0, -0.1, -1.1 - i * 0.85, 1.35 - i * 0.2, 1.25 - i * 0.18, 0.62);
-  for (const s of [1, -1]) {
-    const a = part(body, coneGeo, brown, 0.4 * s, 1.5, 2.9, 0.06, 2.2, 0.06); a.rotation.set(0.7, 0, -0.35 * s);
-    for (let i = 0; i < 3; i++) { const l = part(body, coneGeo, brown, 0.9 * s, -1.4, 1.2 - i * 0.8, 0.12, 1.5, 0.12); l.rotation.set(0.2, 0, Math.PI + 0.5 * s); }
-  }
-  const mouth = pivot(body, 0, 0, 3.4);
-  const foreG = membrane([[0, 1.2], [5, 4.6], [11, 5.4], [12.6, 2.6], [10.5, -1.6], [5.5, -2.6], [0, -1.6]]);
-  const hindG = membrane([[0, 1.4], [6, 1.0], [8.2, -2.6], [6.4, -6.4], [2.6, -6.0], [0, -2.4]]);
-  const wings = [];
-  for (const s of [1, -1]) {
-    const fw = pivot(body, 0.9 * s, 0.7, 1.0); fw.scale.x = s; part(fw, foreG, wingM);
-    const hw = pivot(body, 0.9 * s, 0.6, -0.6); hw.scale.x = s; part(hw, hindG, wingM);
-    wings.push({ fw, hw, s });
-  }
-  const set = { flap: 1, fold: 0, attack: 0, jaw: 0, walk: 0, charge: 0 };
-  let t = 0;
-  function update(dt) {
-    t += dt * (3.2 + set.flap * 2.5);
-    const fl = 0.35 + set.flap * 0.65 * (1 - set.fold * 0.7);
-    body.position.y = 3 + Math.sin(t - 1) * 0.6 * fl;
-    body.rotation.x = set.attack * 0.5 - 0.1;
-    for (const W of wings) {
-      W.fw.rotation.z = W.s * (Math.sin(t) * 0.7 * fl + 0.25);
-      W.hw.rotation.z = W.s * (Math.sin(t - 0.4) * 0.6 * fl + 0.2);
-    }
-    wingM.emissiveIntensity = 0.6 + set.charge * 2.5;
-  }
-  return { root, set, update, height: 6, radius: 3.4, mouths: () => [mouth.getWorldPosition(_v).clone()], flash(k) { fur.emissive.setRGB(k, k * 0.3, k * 0.2); } };
+
+// ---------------- MECHAGODZILLA ----------------
+export function makeMecha() {
+  return rival('mecha', {
+    height: 10.6, radius: 2.7, idle: 'idle', walk: 'walk', stride: 8.43, slide: 0.9, pelvis: 'Bip_Pelvis', mouths: ['Bip_Jaw'],
+    moves: {
+      punch: [['common_attack1', 0, 0.75, 0.42, 0.48, 1.3], ['common_attack2', 0, 0.79, 0.5, 0.48, 1.3]],
+      slam: ['attack2', 0, 2.08, 0.4, 0.55, 1.5],
+      dash: ['attack1', 0, 0.58, 0.3, 0.8, 1.2],
+      missiles: ['aoe', 0, 1.13, 0.3, 0.55, 1.0],
+      eyebeam: ['beam_start', 0, 0.62, 0.6, 1.0, 1, true],
+      roar: ['roar', 0, 1.67, 1, 0.5, 1],
+    },
+    reacts: { hit: ['hit01', 0, 0.62, 1.2], death: ['death', 0, 2.5, 1], knock: ['fall', 0, 2.46, 1.3] },
+  });
 }
 
 // ---------------- KING GHIDORAH ----------------
 export function makeGhidorah() {
-  const gold = hide(0x7a5208, 0xe0b030, { metal: 0.75, rough: 0.32, scale: 9, coat: 0.3 });
-  const dark = hide(0x4a3206, 0xa87c18, { metal: 0.7, rough: 0.4, scale: 9 });
-  const wingM = hide(0x8a6410, 0xe8c048, { metal: 0.5, rough: 0.4, scale: 2.2, side: THREE.DoubleSide });
-  const bone = new THREE.MeshStandardMaterial({ color: 0xf0e6c8, roughness: 0.4 });
-  const eyeM = hot(0xff2a18, 4);
-  const glowM = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff27a).multiplyScalar(4), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-  const B = () => ball;
-  const root = new THREE.Group();
-  const body = pivot(root, 0, 6.2, 0);
-  part(body, B(1), gold, 0, 0, 0, 2.5, 2.7, 2.5);
-  part(body, B(2), gold, 0, 1.9, 0.5, 2.2, 1.7, 1.9);
-  part(body, B(3), dark, 0, 0.3, 1.9, 1.5, 2.3, 0.8);
-  const legs = [];
-  for (const s of [1, -1]) {
-    const hip = pivot(root, 1.7 * s, 5.6, 0);
-    part(hip, B(4), gold, 0, -1.6, 0.2, 1.3, 2.3, 1.6);
-    const knee = pivot(hip, 0, -3.1, 0.4);
-    part(knee, B(5), gold, 0, -1.0, -0.2, 0.85, 1.4, 0.95);
-    part(knee, B(6), gold, 0, -2.2, 0.5, 1.05, 0.42, 1.6);
-    for (let i = -1; i <= 1; i++) { const c = part(knee, coneGeo, bone, i * 0.55, -2.25, 1.9, 0.17, 0.6, 0.17); c.rotation.x = Math.PI / 2; }
-    legs.push({ hip, knee, s });
-  }
-  // three necks
-  const necks = [];
-  const curve = [0.12, 0.05, -0.05, -0.15, -0.2, 0.1, 0.3, 0.5];
-  [[0, 2.9, 1.0, 0, 0.42], [1.6, 2.5, 0.8, -0.5, 0.5], [-1.6, 2.5, 0.8, 0.5, 0.5]].forEach(([x, y, z, rz, rx], n) => {
-    const base = pivot(body, x, y, z); base.rotation.set(rx, 0, rz);
-    const segs = []; let prev = base, r = 0.72, c = rx;
-    curve.forEach((b, i) => {
-      const seg = i === 0 ? base : pivot(prev, 0, 1.05, 0);
-      if (i > 0) seg.rotation.x = b; else seg.rotation.x += b;
-      c += b;
-      part(seg, B(10 + i), gold, 0, 0.5, 0, r, 0.95, r);
-      if (i % 2 === 0) { const sp = part(seg, coneGeo, dark, 0, 0.5, -r, 0.14, 0.7, 0.14); sp.rotation.x = -Math.PI / 2; }
-      segs.push({ seg, b: seg.rotation.x }); prev = seg; r *= 0.95;
-    });
-    const head = pivot(prev, 0, 1.25, 0); head.rotation.x = -c + 0.15; head.rotation.z = -rz;
-    part(head, B(20), gold, 0, 0, 0.2, 0.62, 0.55, 0.95);
-    part(head, B(21), gold, 0, -0.05, 1.05, 0.45, 0.36, 0.75);
-    part(head, eyeGeo, eyeM, 0.42, 0.22, 0.6, 0.09); part(head, eyeGeo, eyeM, -0.42, 0.22, 0.6, 0.09);
-    for (const s of [1, -1]) { const h = part(head, coneGeo, bone, 0.32 * s, 0.6, -0.55, 0.11, 1.6, 0.11); h.rotation.set(-1.0, 0, -0.25 * s); }
-    for (let i = 0; i < 3; i++) { const h = part(head, coneGeo, bone, 0, 0.55, -0.1 - i * 0.3, 0.08, 0.6, 0.08); h.rotation.x = -0.6; }
-    const jaw = pivot(head, 0, -0.28, 0.15);
-    part(jaw, B(22), gold, 0, -0.08, 0.75, 0.42, 0.2, 0.85);
-    part(head, eyeGeo, glowM, 0, -0.25, 1.3, 0.5);
-    const mouth = pivot(head, 0, -0.2, 1.9);
-    necks.push({ segs, head, jaw, mouth, n, baseHeadX: head.rotation.x });
+  return rival('ghidorah', {
+    height: 13, radius: 3.4, idle: 'idle', walk: 'run', stride: 1.45, slide: 0.8, pelvis: 'bip_pelvis', mouths: ['jaw_M', 'jaw_L', 'jaw_R'],
+    moves: {
+      bite: [['attack1', 0.5, 3.2, 1.9, 0.53, 2.2], ['attack2', 0.6, 3.3, 1.9, 0.57, 2.2]],
+      tailwhip: ['tailwhip', 1.0, 3.3, 2.0, 0.7, 2.0],
+      gravity: ['beam', 0.0, 5.4, 1.0, 1.15, 1.25],
+      storm: ['ultimate', 0.8, 4.9, 1.7, 0.9, 1.7],
+      hurricane: ['roar', 0.0, 4.2, 1.5, 0.75, 1.6],
+    },
+    reacts: { block: ['block', 0.4, 2.6, 2] },
   });
-  // wings
-  const wingG = membrane([[0, 0], [3, 6.5], [7.5, 8.4], [12, 7.2], [9.6, 4], [11.2, 1.2], [7.4, 0.8], [6.4, -2.2], [3, -1.2], [0, -2.4]], true);
-  const wings = [];
-  for (const s of [1, -1]) {
-    const w = pivot(body, 1.6 * s, 2.2, -1.2); w.scale.x = s;
-    part(w, wingG, wingM);
-    for (const [x, y] of [[7.5, 8.4], [12, 7.2], [11.2, 1.2]]) {
-      const len = Math.hypot(x, y), b = part(w, coneGeo, gold, x / 2, y / 2, 0.05, 0.2, len, 0.2); b.rotation.z = -Math.atan2(x, y);
-    }
-    wings.push({ w, s });
-  }
-  // twin tails
-  const tails = [];
-  for (const s of [1, -1]) {
-    let prev = pivot(body, 0.7 * s, -1.2, -1.8), r = 1.0; prev.rotation.y = -0.22 * s;
-    const segs = [];
-    const bend = [-0.35, -0.3, -0.2, 0.25, 0.3, 0.2, 0.05, 0.05, 0.05];
-    bend.forEach((b, i) => {
-      const seg = i === 0 ? prev : pivot(prev, 0, 0, -1.7);
-      seg.rotation.x = b;
-      part(seg, B(30 + i), gold, 0, 0, -0.85, r, r, 1.5);
-      segs.push(seg); prev = seg; r *= 0.84;
-    });
-    for (let i = 0; i < 6; i++) { const sp = part(prev, coneGeo, bone, 0, 0, -1.6, 0.12, 0.9, 0.12); sp.rotation.set(Math.PI / 2 + Math.cos(i) * 0.8, 0, Math.sin(i * 1.05) * 0.8); }
-    tails.push({ segs, s });
-  }
-  const set = { flap: 0.3, fold: 0, attack: 0, jaw: 0, walk: 0, charge: 0 };
-  let t = 0, ph = 0;
-  function update(dt) {
-    t += dt; ph += dt * (1.4 + set.walk * 2) * (set.walk > 0.02 ? 1 : 0);
-    body.position.y = 6.2 + Math.abs(Math.cos(ph)) * 0.2 * set.walk + Math.sin(t * 1.2) * 0.06;
-    body.rotation.x = set.attack * 0.35;
-    for (const L of legs) {
-      const a = Math.sin(ph + (L.s > 0 ? 0 : Math.PI));
-      L.hip.rotation.x = -a * 0.38 * set.walk; L.knee.rotation.x = Math.max(0, a) * 0.5 * set.walk;
-    }
-    for (const N of necks) {
-      N.segs.forEach((s, i) => {
-        s.seg.rotation.x = s.b + Math.sin(t * 1.6 - i * 0.6 + N.n * 2.1) * 0.07 * (1 - set.charge * 0.6) + (i > 4 ? set.attack * 0.12 : 0);
-        if (i > 0) s.seg.rotation.z = Math.sin(t * 1.1 - i * 0.5 + N.n * 1.3) * 0.06;
-      });
-      N.jaw.rotation.x = Math.max(set.jaw, set.charge) * 0.6;
-      N.head.rotation.x = N.baseHeadX - set.attack * 0.3;
-    }
-    glowM.opacity = set.charge * 0.9;
-    for (const W of wings) {
-      W.w.rotation.y = W.s * (-0.5 + Math.sin(t * (2 + set.flap * 4)) * (0.12 + set.flap * 0.35));
-      W.w.rotation.z = W.s * -0.15;
-    }
-    for (const T of tails) T.segs.forEach((s, i) => { s.rotation.y = Math.sin(t * 1.3 - i * 0.6 + T.s) * 0.1; });
-  }
-  return { root, set, update, height: 15, radius: 3.6, mouths: () => necks.map((n) => n.mouth.getWorldPosition(new THREE.Vector3())), flash(k) { gold.emissive.setRGB(k, k * 0.3, k * 0.2); } };
 }
 
-// ---------------- KING KONG (rigged model with its own animation clips, see CREDITS.md) ----------------
-let kongFit = null;
-const KONG_MOVES = { punch: ['attack2', 1], leap: ['smash_char', 1.3], boulders: ['throw', 2], roar: ['roar', 1.7] };
-export function makeKong() {
-  const src = assets.kong;
-  const root = new THREE.Group(), holder = new THREE.Group(), model = cloneSkinned(src.scene);
-  holder.add(model); root.add(holder);
-  const mats = [];
-  model.traverse((m) => { if (m.isMesh) { m.material = m.material.clone(); m.material.side = THREE.FrontSide; mats.push(m.material); m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; } });
-  const mixer = new THREE.AnimationMixer(model), act = {};
-  for (const c of src.animations) act[c.name.split('|').pop()] = mixer.clipAction(c);
-  act.idle.play(); mixer.update(0); model.updateMatrixWorld(true);
-  if (!kongFit) {
-    const box = new THREE.Box3().setFromObject(model, true), k = 9.4 / (box.max.y - box.min.y);
-    kongFit = { k, y: -box.min.y * k };
-  }
-  holder.scale.setScalar(kongFit.k); holder.position.y = kongFit.y;
-  const B = findBones(model, { head: 'bip_head', lip: 'def_c_lipLwr01', hand: 'bip_hand_r' });
-  const set = { flap: 0, fold: 0, attack: 0, jaw: 0, walk: 0, charge: 0, move: null };
-  let cur = 'idle', once = false, lastMove = null, punch = 0;
-  const go = (name, fade = 0.18, loop = true, speed = 1) => {
-    if (name === cur && loop) return;
-    const a = act[name], prev = act[cur];
-    a.reset(); a.timeScale = speed; a.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity); a.clampWhenFinished = !loop;
-    a.play(); if (prev && prev !== a) prev.crossFadeTo(a, fade, false);
-    cur = name; once = !loop;
+// ---------------- RODAN ----------------
+// This rig ships without animation clips, so flight is driven through its wing, neck and tail bones.
+function volcanicHide() {
+  const m = new THREE.MeshPhysicalNodeMaterial({ metalness: 0, clearcoat: 0.2, clearcoatRoughness: 0.5 });
+  const cell = mx_worley_noise_float(positionLocal.mul(3.2)), blotch = mx_noise_float(positionLocal.mul(0.12)).mul(0.5).add(0.5), k = smoothstep(0.05, 0.4, cell);
+  m.colorNode = mix(color(0x4a1f12), color(0x7e3c24), k).mul(blotch.mul(0.4).add(0.7));
+  m.roughnessNode = mix(float(0.85), float(0.55), k);
+  m.side = THREE.DoubleSide;
+  return m;
+}
+export function makeRodan() {
+  const rig = makeRig('rodan', { height: 8.2, pelvis: 'bod_', doubleSided: true });
+  const hide = volcanicHide();
+  rig.model.traverse((m) => { if (m.isMesh && !m.material.map) { hide.normalMap = m.material.normalMap; m.material = hide; } });
+  const names = {};
+  for (const s of ['l', 'r']) for (const i of ['001', '002', '003', '010', '013', '016']) names[`w${s}${i}`] = `wing_${s}.${i}`;
+  const B = rig.bones({ ...names, neck: 'neck_', neck1: 'neck.001', neck2: 'neck.002', head: 'head_', jaw: 'jaw_', spine: 'spine_', tail: 'tail_', tail1: 'tail.001', tail2: 'tail.002', legL: 'leg_l_', legR: 'leg_r_' });
+  // which side each wing is on (bone names are not a reliable guide to handedness)
+  rig.root.updateMatrixWorld(true);
+  const side = (b) => (b ? Math.sign(rig.root.worldToLocal(b.getWorldPosition(new THREE.Vector3())).x) || 1 : 1);
+  const wings = [['wl001', 'wl002', 'wl003', ['wl010', 'wl013', 'wl016']], ['wr001', 'wr002', 'wr003', ['wr010', 'wr013', 'wr016']]].map(([a, b, c, f]) => ({ a: B[a], b: B[b], c: B[c], fingers: f.map((n) => B[n]), s: side(B[c] || B[a]) }));
+  const rest = new Map();
+  rig.model.traverse((o) => { if (o.isBone) rest.set(o, o.quaternion.clone()); });
+
+  // set.fly 1 = level flight, 0 = standing; set.flap wing-beat strength; set.dive pulls the wings in
+  const set = { fly: 1, flap: 1, dive: 0, walk: 0, speed: 0, charge: 0, hurt: 0, jaw: 0 };
+  const moves = { dive: 1.15, gust: 0.75, peck: 0.55 };
+  let t = Math.random() * 6, flash = 0, fly = 1, dive = 0;
+  const rootQ = new THREE.Quaternion();
+  const api = {
+    root: rig.root, rig, set, height: 8.2, radius: 3.0, bones: B, moves,
+    update(dt) {
+      t += dt * (5.2 + set.flap * 2.4);
+      fly += (set.fly - fly) * Math.min(1, dt * 4); dive += (set.dive - dive) * Math.min(1, dt * 8);
+      for (const [b, q] of rest) b.quaternion.copy(q);
+      // body: upright when standing, laid forward in flight, nose down in a dive
+      rig.tilt.rotation.x = fly * 1.32 + dive * 0.5 - set.hurt * 0.2;
+      rig.tilt.position.y = rig.fit.hipY + Math.sin(t - 0.9) * 0.3 * fly * (1 - dive);
+      rig.root.updateMatrixWorld(true);
+      rig.tilt.getWorldQuaternion(rootQ);
+      const beat = Math.sin(t), lag = Math.sin(t - 0.8), amp = set.flap * (1 - dive * 0.85) * (0.35 + fly * 0.3);
+      for (const W of wings) {
+        // spread flat in flight, swept back and half folded on the ground or in a dive
+        const fold = (1 - fly) * 0.9 + dive * 0.75;
+        turnBone(W.a, rootQ, AX.z, W.s * (beat * amp + 0.08 - fold * 0.5));
+        turnBone(W.a, rootQ, AX.y, W.s * -fold * 0.9);
+        turnBone(W.b, rootQ, AX.z, W.s * (lag * amp * 0.7 - fold * 0.35));
+        turnBone(W.c, rootQ, AX.z, W.s * (Math.sin(t - 1.5) * amp * 0.6));
+        for (const f of W.fingers) turnBone(f, rootQ, AX.y, W.s * -fold * 0.5);
+      }
+      // in flight the head looks ahead instead of at the sky; the tail trails
+      for (const b of [B.neck, B.neck1, B.neck2, B.head]) turnBone(b, rootQ, AX.x, -fly * 0.3 + Math.sin(t * 0.5) * 0.02);
+      turnBone(B.jaw, rootQ, AX.x, set.jaw * 0.45);
+      for (const b of [B.tail, B.tail1, B.tail2]) turnBone(b, rootQ, AX.x, Math.sin(t - 2) * 0.05 * fly);
+      for (const b of [B.legL, B.legR]) turnBone(b, rootQ, AX.x, fly * 0.9);
+      hide.emissive.setRGB(Math.max(0, flash) * 0.55, Math.max(0, flash) * 0.14, Math.max(0, flash) * 0.08);
+    },
+    move(id) { const hit = moves[id] ?? 0.6; return { hit, total: hit + 0.6 }; },
+    landed() {}, stop() {},
+    react() { return false; },
+    mouths: () => [(B.jaw || B.head).getWorldPosition(new THREE.Vector3())],
+    flash(k) { flash = k; },
   };
-  mixer.addEventListener('finished', () => { once = false; });
-  function update(dt) {
-    if (set.fold > 0.9 && !set.move) { if (cur !== 'ragdoll') go('ragdoll', 0.5, false, 1); }
-    else if (set.move && set.move !== lastMove) {
-      let [clip, speed] = KONG_MOVES[set.move] || ['attack3', 1];
-      if (set.move === 'punch') clip = punch++ % 2 ? 'attack3' : 'attack2';
-      go(clip, 0.1, false, speed);
-    } else if (!once) go(set.walk > 0.3 ? 'walk' : 'idle', 0.25, true, set.walk > 0.3 ? 1.25 : 1);
-    lastMove = set.move;
-    mixer.update(dt);
-  }
-  const v = new THREE.Vector3();
-  return {
-    root, set, update, height: 9.4, radius: 2.8,
-    mouths: () => [B.lip.getWorldPosition(new THREE.Vector3())],
-    handWorld: (out = v) => B.hand.getWorldPosition(out),
-    flash(k) { for (const m of mats) m.emissive.setRGB(k * 0.6, k * 0.15, k * 0.1); },
-  };
+  rig.root.getWorldQuaternion(_q);
+  return api;
 }

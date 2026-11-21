@@ -2,13 +2,13 @@ import * as THREE from 'three/webgpu';
 import { GameScene } from './core/scene.js';
 import { setupSky, ground } from './world/sky.js';
 import { makeGodzilla } from './models/godzilla.js';
-import { makeRodan, makeMothra, makeGhidorah, makeKong } from './models/rivals.js';
+import { makeRodan, makeMecha, makeGhidorah, makeKong } from './models/rivals.js';
 import * as VEH from './models/vehicles.js';
 import * as PPL from './models/people.js';
 
 // Dev tool: /?scene=view&m=godzilla&a=0.8  — look at one model on a turntable.
 const MAKERS = {
-  godzilla: () => makeGodzilla(), mecha: () => makeGodzilla({ mecha: true }), kong: makeKong, rodan: makeRodan, mothra: makeMothra, ghidorah: makeGhidorah,
+  godzilla: () => makeGodzilla(), mecha: makeMecha, kong: makeKong, rodan: makeRodan, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
   mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
 };
@@ -29,6 +29,10 @@ export class ViewerScene extends GameScene {
     if (this.spin) this.a += dt * 0.5;
     this.camera.position.set(Math.sin(this.a) * this.dist, this.h + this.dist * 0.15, Math.cos(this.a) * this.dist);
     this.camera.lookAt(0, this.h, 0);
+    // ?move=claw1 replays a move every few seconds; ?act=Clip&at=1.2 freezes a clip at a time
+    const mv = this.q.get('move'), act = this.q.get('act');
+    if (mv && this.m.move && (this.t % (+(this.q.get('every') || 3))) < dt) this.m.move(mv);
+    if (act && this.m.rig && !this.froze) { this.froze = true; this.m.rig.act(act, { start: +(this.q.get('at') || 0), end: +(this.q.get('at') || 0), hold: true, fade: 0 }); }
     if (this.m.update) this.m.update(dt, +(this.q.get('speed') ?? 4));
   }
 }

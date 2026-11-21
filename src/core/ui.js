@@ -20,7 +20,7 @@ export class UI {
 
   reset() {
     this.objective(''); this.bar('L', null); this.bar('R', null); this.meter(null); this.prompt(null);
-    this.reticle(null); this.marker(null); this.timing(null); this.controls([], ''); this.vignette(0);
+    this.reticle(null); this.marker(null); this.timing(null); this.combo(0); this.controls([], ''); this.vignette(0);
     $('subtitle').classList.remove('on'); $('banner').classList.remove('on');
   }
 
@@ -31,10 +31,13 @@ export class UI {
     el.classList.toggle('off', name == null);
     if (name == null) return;
     el.querySelector('.barname').textContent = name;
-    el.querySelector('.hp i').style.width = Math.max(0, Math.min(1, v)) * 100 + '%';
+    const w = Math.max(0, Math.min(1, v)) * 100 + '%';
+    el.querySelector('.hp i').style.width = w; el.querySelector('.hp u').style.width = w; // the pale bar behind trails after a hit
     const en = el.querySelector('.en');
     if (en) { en.classList.toggle('off', v2 == null); if (v2 != null) en.firstElementChild.style.width = Math.max(0, Math.min(1, v2)) * 100 + '%'; }
   }
+
+  combo(n) { const el = $('combo'); el.textContent = n >= 2 ? n + ' HITS' : ''; if (n >= 2) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } }
 
   meter(label, v, color) {
     const el = $('meter');
