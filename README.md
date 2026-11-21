@@ -13,7 +13,8 @@ A 3D browser game built with [Three.js](https://threejs.org/) on its WebGPU rend
 - Rigged monsters driven by their own animation clips (walk, attacks, tail swing, roar, atomic breath); people in 1940s dress built in code on an animated skeleton.
 - Generated sound effects and voiced dialogue, with a synthesized score.
 - Cities built at load time by Three.js's `CityGenerator` / `SkyscraperGenerator` (brick towers with lit interiors, sidewalks, parked cars, street trees) — and every tower can be knocked down.
-- Hills and forest from `TerrainGenerator` / `ForestGenerator`; crowds from `PersonGenerator`.
+- Odo Island is a real heightfield with the trees planted on it: `TreeGenerator` trunks hung with leaf sprays, coconut palms and undergrowth. Distant hills use `TerrainGenerator` / `ForestGenerator`; crowds come from `PersonGenerator`.
+- Explosions, smoke, spray, muzzle flashes and tracers are soft camera-facing particles shaded in TSL, bright enough to bloom.
 - Sourced Zero, Shinden, destroyer and gun models, with code-built `LoftGeometry` versions as fallbacks; the boats are built in code.
 - **Main menu → Graphics: Low** turns off bloom and shadows and lowers the resolution for slower devices.
 
@@ -57,6 +58,7 @@ Red rings on the ground show where an attack or falling wreckage is about to lan
 
 ### Kaiju Brawl tips
 
+- Two arenas: **Ginza by night** and **Sagami Bay**. Each rival has a home ground; **Arena** on the Brawl menu overrides it.
 - Claw presses chain into a three-hit combo (claw, claw, bite); the tail sweep is slower but hits all round and staggers.
 - Tap Shift with a direction to sidestep out of a warning ring; hold Shift to block.
 - Heavy hits drain a rival's poise; empty it and they go down for a moment, open to a full combo. Below a third of their health they become enraged.
@@ -103,10 +105,13 @@ public/audio/           generated sound effects and voiced dialogue
 api/feedback.js         Vercel function that receives player feedback
 src/main.js             renderer set-up, game loop, menus, mode switching, save data
 src/core/               input, audio synth, UI overlay, effects, asset loading, scene base (render pipeline)
-src/models/             rig driver, Godzilla, rivals, vehicles, people
-src/world/              sky, ocean, generated city, hills, props
+src/models/             rig driver, Godzilla, rivals, vehicles, people, fish
+src/world/              sky, ocean, generated city, Odo Island terrain, trees, props
 src/story/              chapter scenes, title-card script, on-foot / turret / flight controllers
 src/brawl/              combat, rival roster and AI, dev autopilot
+tools/rig-check.cjs     dev check that every fighter's limbs move in every move
 ```
 
-Developer shortcuts: `/?scene=ch3` jumps to a chapter, `/?scene=brawl&rival=kong&arena=city` to a fight, `/?scene=view&m=zero&spin` shows a model on a turntable, `&skip` skips the title cards, `&lite` forces low graphics, and `/?scene=brawl&rival=kong&bot` lets an autopilot play Godzilla (used to measure balance).
+Developer shortcuts: `/?scene=ch3` jumps to a chapter, `/?scene=brawl&rival=kong&arena=city` to a fight, `/?scene=view&m=zero&spin` shows a model on a turntable, `&skip` skips the title cards, `&lite` forces low graphics, and `/?scene=brawl&rival=kong&bot` lets an autopilot play Godzilla (used to measure balance). `/?scene=view&m=palm` (or `broadleaf`, `alfonsino`, `rodan`…) shows any model.
+
+`tools/rig-check.cjs` loads each fighter and fails if its limbs stay still while idling, walking or attacking. It needs the dev server running and Playwright available (`npx playwright install chromium` once), then `node tools/rig-check.cjs`.

@@ -1,6 +1,6 @@
 // Sound effects and voices are generated clips (public/audio); every effect also has a synthesized
 // fallback, and the score is fully synthesized.
-const SAMPLES = ['roar_godzilla', 'roar_godzilla_short', 'roar_rodan', 'roar_kong', 'roar_mecha', 'roar_ghidorah', 'impact_heavy', 'impact_claw', 'footstep', 'beam_charge', 'beam_fire', 'explosion', 'collapse', 'gun', 'plane', 'boat', 'splash', 'mine', 'whoosh', 'crowd', 'block'];
+const SAMPLES = ['roar_godzilla', 'roar_godzilla_short', 'roar_rodan', 'roar_kong', 'roar_mecha', 'roar_ghidorah', 'impact_heavy', 'impact_claw', 'footstep', 'beam_charge', 'beam_fire', 'explosion', 'collapse', 'gun_deck', 'gun_cannon', 'plane', 'boat', 'splash', 'mine', 'whoosh', 'crowd', 'block'];
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
 // Step-sequenced score. drum: 16 steps/bar ('x' hit, 'o' soft). bass: 8 notes/bar (MIDI, 0 = rest).
@@ -93,9 +93,10 @@ export class AudioSys {
 
   // --- effects ---
   click() { this.tone('square', 660, 440, 0.06, 0.08); }
-  gun() { if (this.play('gun', 0.5, 1, { jitter: 0.12 })) return; this.noise(0.09, 0.35, 3200, 600, 'bandpass'); this.tone('square', 190, 70, 0.07, 0.18); }
+  // one shot: 'deck' is the boat's machine gun, 'cannon' the Shinden's 30 mm
+  gun(kind = 'deck') { const big = kind === 'cannon'; if (this.play(big ? 'gun_cannon' : 'gun_deck', big ? 0.5 : 0.4, 1, { jitter: 0.07 })) return; this.noise(0.09, 0.5, big ? 1800 : 3200, big ? 300 : 600, 'bandpass'); this.tone('square', big ? 120 : 190, big ? 45 : 70, 0.08, 0.3); }
   hit(v = 1) { this.noise(0.22, 0.5 * v, 900, 90); this.tone('sine', 140, 40, 0.25, 0.6 * v); }
-  step(v = 1) { if (this.play('footstep', Math.min(1, v * 1.6), 1, { jitter: 0.15 })) return; this.tone('sine', 70, 28, 0.45, 0.8 * v); this.noise(0.35, 0.3 * v, 300, 40); }
+  step(v = 1) { if (this.play('footstep', Math.min(1, v * 0.8), 1, { jitter: 0.15 })) return; this.tone('sine', 70, 28, 0.45, 0.8 * v); this.noise(0.35, 0.3 * v, 300, 40); }
   boom(size = 1) {
     if (this.play('explosion', Math.min(1, 0.45 * size + 0.15), 1.25 - Math.min(0.4, size * 0.15), { jitter: 0.1 })) return;
     const d = 0.8 + size * 0.9;

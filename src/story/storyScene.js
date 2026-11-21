@@ -100,9 +100,9 @@ export class Turret {
     this.cool -= dt; this.fired = false;
     if (canFire && inp.held('a') && this.cool <= 0) {
       this.cool = 0.1; this.fired = true;
-      S.audio.gun();
+      S.audio.gun('deck');
       const muzzle = _b.copy(o).addScaledVector(d, 4); muzzle.y -= 0.7;
-      S.fx.spawn(muzzle, _c.copy(d).multiplyScalar(420), 0.28, 0.28, 0xfff0a0, 0xffa030);
+      S.fx.muzzle(muzzle, d, 1); S.fx.tracer(muzzle, _c.copy(d).multiplyScalar(420), 0.3);
       if (this.gun) this.gun.position.z = -1.75;
       if (best) { const p = _c.copy(o).addScaledVector(d, bestT); S.fx.burst(p, 4, 14, 0.35, 0.5, 0xfff0a0, 0xff7020); best.onHit(p.clone()); }
       else if (d.y < -0.01) { const k = -o.y / d.y; if (k < 700) S.fx.splash(_c.copy(o).addScaledVector(d, k), 0.5); }
@@ -166,8 +166,9 @@ export class Plane {
     this.cool -= dt;
     if (!input.held('a') || this.cool > 0) return false;
     this.cool = 0.09;
-    S.audio.gun();
-    S.fx.spawn(_b.copy(this.pos).addScaledVector(f, 6), _c.copy(f).multiplyScalar(this.speed + 520), 0.5, 0.5, 0xfff0a0, 0xffa030);
+    S.audio.gun('cannon');
+    _b.copy(this.pos).addScaledVector(f, 6);
+    S.fx.muzzle(_b, f, 2.2); S.fx.tracer(_b, _c.copy(f).multiplyScalar(this.speed + 520), 0.5, 0xffe890, 0.9);
     if (best) best.onHit(best.pos.clone().addScaledVector(f, -best.r * 0.8));
     return true;
   }

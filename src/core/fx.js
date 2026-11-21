@@ -85,8 +85,9 @@ class Pool {
       const sz = p.size * (1 + p.grow * k);
       let w = sz, h = sz, rot = p.rot;
       if (p.stretch && cam) { // lie along the direction of travel as the camera sees it
-        _d.copy(p.vel).transformDirection(cam.matrixWorldInverse);
-        rot = Math.atan2(_d.y, _d.x); w = sz * (1 + p.stretch * Math.hypot(_d.x, _d.y));
+        const speed = p.vel.length();
+        _d.copy(p.vel).transformDirection(cam.matrixWorldInverse); // unit direction in view space
+        rot = Math.atan2(_d.y, _d.x); w = sz * (1 + p.stretch * speed * Math.hypot(_d.x, _d.y)); h = sz * 0.55;
       }
       const fade = (p.fadeIn > 0 ? Math.min(1, k / p.fadeIn) : 1) * (k > 1 - p.fadeOut ? (1 - k) / p.fadeOut : 1);
       P[i * 3] = p.pos.x; P[i * 3 + 1] = p.pos.y; P[i * 3 + 2] = p.pos.z;
@@ -109,7 +110,7 @@ export class FX {
     this.light = new THREE.PointLight(0xffaa55, 0, 0, 1.2);
     scene.add(this.light);
     this.ringGeo = new THREE.RingGeometry(0.9, 1, 40).rotateX(-Math.PI / 2);
-    this.waveGeo = new THREE.RingGeometry(0.72, 1, 48, 1).rotateX(-Math.PI / 2);
+    this.waveGeo = new THREE.RingGeometry(0.8, 1, 48, 1).rotateX(-Math.PI / 2);
     this.discGeo = new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2);
   }
 
@@ -117,7 +118,7 @@ export class FX {
   spawn(pos, vel, life, size, c0, c1, grav = 0, grow = 0, drag = 0, o = {}) {
     _c.set(c0);
     const glow = o.kind ? o.kind === 'fire' : this.hdr > 1 || (_c.r > 0.8 && _c.b < _c.r * 0.78);
-    return (glow ? this.fire : this.smoke).emit({ pos, vel, life, size: size * 2.3, c0, c1, grav, grow, drag, hdr: glow ? Math.max(2.2, this.hdr * 1.5) : 0, hdr1: glow ? 0.6 : 0, a: glow ? 1 : 0.85, fadeIn: glow ? 0 : 0.08, fadeOut: glow ? 0.6 : 0.5, stretch: o.stretch ?? 0 });
+    return (glow ? this.fire : this.smoke).emit({ pos, vel, life, size: size * 2.3, c0, c1, grav, grow, drag, hdr: glow ? (this.hdr > 1 ? this.hdr * 0.85 : 1.7) : 0, hdr1: glow ? 0.6 : 0, a: glow ? 1 : 0.85, fadeIn: glow ? 0 : 0.08, fadeOut: glow ? 0.6 : 0.5, stretch: o.stretch ?? 0 });
   }
   burst(pos, n, speed, life, size, c0, c1, o = {}) {
     for (let i = 0; i < n; i++) {
@@ -177,7 +178,7 @@ export class FX {
   splash(pos, s = 1) {
     const K = this.smoke;
     for (let i = 0; i < 9; i++) { _d.set(rnd(-3, 3) * s, rnd(9, 20) * s, rnd(-3, 3) * s); _s.copy(pos); _s.x += rnd(-1, 1) * s; _s.z += rnd(-1, 1) * s; K.emit({ pos: _s, vel: _d, life: rnd(0.9, 1.5), size: rnd(1.6, 2.6) * s, grow: 1.0, grav: 24 * s, drag: 0.4, c0: 0xf6fbff, c1: 0xbdd6e2, a: 0.9, fadeIn: 0.05, fadeOut: 0.45 }); }
-    for (let i = 0; i < 5; i++) { _d.set(rnd(-4, 4) * s, rnd(1, 4) * s, rnd(-4, 4) * s); K.emit({ pos, vel: _d, life: rnd(1.4, 2.2), size: rnd(2.6, 4) * s, grow: 1.4, drag: 1.6, c0: 0xe4eef4, c1: 0xb4c8d2, a: 0.45, fadeIn: 0.15, fadeOut: 0.7 }); }
+    for (let i = 0; i < 5; i++) { const size = rnd(2.6, 4) * s; _d.set(rnd(-4, 4) * s, rnd(1, 4) * s, rnd(-4, 4) * s); _s.copy(pos); _s.y += size * 0.4; K.emit({ pos: _s, vel: _d, life: rnd(1.4, 2.2), size, grow: 1.4, drag: 1.6, c0: 0xe4eef4, c1: 0xb4c8d2, a: 0.45, fadeIn: 0.15, fadeOut: 0.7 }); }
     for (let i = 0; i < 10; i++) { _d.set(rnd(-9, 9) * s, rnd(8, 22) * s, rnd(-9, 9) * s); K.emit({ pos, vel: _d, life: rnd(0.8, 1.4), size: rnd(0.35, 0.6) * s, grav: 30 * s, c0: 0xffffff, c1: 0xd6e6ee, a: 0.9, fadeOut: 0.3, stretch: 0.08 / s, spin: 0 }); }
     if (s >= 0.6) this.wave(pos, 6 * s, 0.9, 0xcfe4ee, 0.3);
   }
@@ -186,7 +187,7 @@ export class FX {
     const K = this.smoke;
     for (let i = 0; i < n; i++) { _d.set(rnd(-1, 1), rnd(0.3, 1.9), rnd(-1, 1)).normalize().multiplyScalar(rnd(7, 19) * s); _s.copy(pos); _s.x += rnd(-2, 2) * s; _s.z += rnd(-2, 2) * s; K.emit({ pos: _s, vel: _d, life: rnd(1.1, 2.0), size: rnd(0.5, 1.0) * s, grav: 38, c0: color, c1: 0x2a2622, a: 1, fadeOut: 0.25, stretch: 0.03, spin: 0 }); }
     const puffs = Math.ceil(n * 0.6);
-    for (let i = 0; i < puffs; i++) { _d.set(rnd(-5, 5) * s, rnd(1, 5) * s, rnd(-5, 5) * s); _s.copy(pos); _s.x += rnd(-2.5, 2.5) * s; _s.z += rnd(-2.5, 2.5) * s; K.emit({ pos: _s, vel: _d, life: rnd(1.8, 3.0), size: rnd(3.5, 6) * s, grow: 1.3, drag: 1.4, c0: 0x8a8478, c1: 0x4a4640, a: 0.5, fadeIn: 0.12, fadeOut: 0.65 }); }
+    for (let i = 0; i < puffs; i++) { _d.set(rnd(-5, 5) * s, rnd(1, 5) * s, rnd(-5, 5) * s); const size = rnd(3.5, 6) * s; _s.copy(pos); _s.x += rnd(-2.5, 2.5) * s; _s.z += rnd(-2.5, 2.5) * s; _s.y += size * 0.42; K.emit({ pos: _s, vel: _d, life: rnd(1.8, 3.0), size, grow: 1.3, drag: 1.4, c0: 0x8a8478, c1: 0x4a4640, a: 0.62, fadeIn: 0.12, fadeOut: 0.65 }); }
   }
   // Ground telegraph: ring + disc that fills as the impact approaches.
   warn(pos, radius, dur, color = 0xff3b1f, fill = true) {
