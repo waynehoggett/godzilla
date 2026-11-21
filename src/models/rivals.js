@@ -1,10 +1,25 @@
 import * as THREE from 'three/webgpu';
+import { positionLocal, color, mix, smoothstep, float, mx_worley_noise_float, mx_noise_float } from 'three/tsl';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { assets } from '../core/assets.js';
-import { blobGeo, part, pivot, findBones } from './godzilla.js';
+import { part, pivot, findBones } from './godzilla.js';
 
-const coneGeo = new THREE.ConeGeometry(1, 1, 5);
-const eyeGeo = new THREE.SphereGeometry(1, 8, 6);
+const coneGeo = new THREE.ConeGeometry(1, 1, 14);
+const eyeGeo = new THREE.SphereGeometry(1, 12, 8);
+const ball = new THREE.SphereGeometry(1, 28, 18);
+const hot = (c, k = 3) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k) }); // bright enough to bloom
+
+// Smooth hide with a procedural scale pattern: c1 in the grooves, c2 on the scales.
+function hide(c1, c2, o = {}) {
+  const m = new THREE.MeshPhysicalNodeMaterial({ metalness: o.metal ?? 0, clearcoat: o.coat ?? 0.15, clearcoatRoughness: 0.5, sheen: o.sheen ?? 0, sheenRoughness: 0.6 });
+  if (o.sheen) m.sheenColor = new THREE.Color(o.sheenColor ?? 0xffffff);
+  const p = positionLocal.mul(o.scale ?? 7), cell = mx_worley_noise_float(p), blotch = mx_noise_float(positionLocal.mul(1.3)).mul(0.5).add(0.5);
+  const k = smoothstep(0.08, 0.45, cell);
+  m.colorNode = mix(color(c1), color(c2), k).mul(blotch.mul(0.35).add(0.72));
+  m.roughnessNode = mix(float((o.rough ?? 0.6) + 0.2), float(o.rough ?? 0.6), k);
+  if (o.side) m.side = o.side;
+  return m;
+}
 const _v = new THREE.Vector3();
 
 // Flat membrane from outline points [span, chord]; lies in the XZ plane, spanning +X.
@@ -23,11 +38,11 @@ function membrane(pts, flip = false) {
 
 // ---------------- RODAN ----------------
 export function makeRodan() {
-  const skin = new THREE.MeshStandardMaterial({ color: 0x6e3520, roughness: 0.95, flatShading: true, emissive: 0x000000 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x3d1c12, roughness: 1, flatShading: true });
-  const wingM = new THREE.MeshStandardMaterial({ color: 0x8a4a2c, roughness: 0.9, side: THREE.DoubleSide, flatShading: true });
-  const bone = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.7, flatShading: true });
-  const B = (seed) => blobGeo(1, 0.1, seed);
+  const skin = hide(0x3a160c, 0x7a3a20, { rough: 0.55, scale: 8 });
+  const dark = hide(0x24100a, 0x4a2214, { rough: 0.6, scale: 8 });
+  const wingM = hide(0x4a2010, 0x9a5230, { rough: 0.5, scale: 3, side: THREE.DoubleSide });
+  const bone = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.45 });
+  const B = () => ball;
   const root = new THREE.Group();
   const body = pivot(root, 0, 3.2, 0);
   part(body, B(1), skin, 0, 0, 0, 1.5, 1.35, 2.7);
@@ -41,7 +56,7 @@ export function makeRodan() {
   const jaw = pivot(head, 0, -0.25, 0.5);
   const beakL = part(jaw, coneGeo, bone, 0, 0, 0.9, 0.26, 1.5, 0.16); beakL.rotation.x = Math.PI / 2;
   for (const s of [1, -1]) { const c = part(head, coneGeo, skin, 0.3 * s, 0.5, -0.8, 0.2, 1.7, 0.2); c.rotation.x = -1.2; }
-  const eyeM = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+  const eyeM = hot(0xffc040);
   part(head, eyeGeo, eyeM, 0.5, 0.2, 0.5, 0.09); part(head, eyeGeo, eyeM, -0.5, 0.2, 0.5, 0.09);
   const mouth = pivot(head, 0, -0.1, 2.4);
   const tailP = part(body, coneGeo, skin, 0, 0.1, -3.4, 1.1, 2.4, 0.3); tailP.rotation.x = -Math.PI / 2;
@@ -101,17 +116,17 @@ function mothWingTexture() {
   return t;
 }
 export function makeMothra() {
-  const fur = new THREE.MeshStandardMaterial({ color: 0xe9dfc6, roughness: 1, flatShading: true, emissive: 0x000000 });
-  const brown = new THREE.MeshStandardMaterial({ color: 0x7a4a22, roughness: 1, flatShading: true });
+  const fur = hide(0xcfc2a4, 0xf2ead6, { rough: 0.9, scale: 14, sheen: 1, coat: 0 });
+  const brown = hide(0x4a2a12, 0x8a5a2c, { rough: 0.9, scale: 14, sheen: 1, sheenColor: 0xffd9a0, coat: 0 });
   const wingM = new THREE.MeshStandardMaterial({ map: mothWingTexture(), roughness: 0.8, side: THREE.DoubleSide, emissive: 0x402008, emissiveIntensity: 0.6 });
-  const eyeM = new THREE.MeshBasicMaterial({ color: 0x37a6ff });
-  const B = (seed) => blobGeo(2, 0.08, seed);
+  const eyeM = hot(0x2a90ff, 4);
+  const B = () => ball;
   const root = new THREE.Group();
   const body = pivot(root, 0, 3, 0);
   part(body, B(1), fur, 0, 0, 0.4, 1.5, 1.4, 1.7);
   part(body, B(2), fur, 0, 0.1, 2.2, 1.0, 0.95, 0.95);
   part(body, eyeGeo, eyeM, 0.62, 0.35, 2.75, 0.42); part(body, eyeGeo, eyeM, -0.62, 0.35, 2.75, 0.42);
-  for (let i = 0; i < 5; i++) part(body, blobGeo(1, 0.05, 3), i % 2 ? brown : fur, 0, -0.1, -1.1 - i * 0.85, 1.35 - i * 0.2, 1.25 - i * 0.18, 0.62);
+  for (let i = 0; i < 5; i++) part(body, ball, i % 2 ? brown : fur, 0, -0.1, -1.1 - i * 0.85, 1.35 - i * 0.2, 1.25 - i * 0.18, 0.62);
   for (const s of [1, -1]) {
     const a = part(body, coneGeo, brown, 0.4 * s, 1.5, 2.9, 0.06, 2.2, 0.06); a.rotation.set(0.7, 0, -0.35 * s);
     for (let i = 0; i < 3; i++) { const l = part(body, coneGeo, brown, 0.9 * s, -1.4, 1.2 - i * 0.8, 0.12, 1.5, 0.12); l.rotation.set(0.2, 0, Math.PI + 0.5 * s); }
@@ -143,13 +158,13 @@ export function makeMothra() {
 
 // ---------------- KING GHIDORAH ----------------
 export function makeGhidorah() {
-  const gold = new THREE.MeshStandardMaterial({ color: 0xd2a424, roughness: 0.55, metalness: 0.25, flatShading: true, emissive: 0x000000 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x8a6412, roughness: 0.7, metalness: 0.3, flatShading: true });
-  const wingM = new THREE.MeshStandardMaterial({ color: 0xd8b040, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide, flatShading: true });
-  const bone = new THREE.MeshStandardMaterial({ color: 0xf0e6c8, roughness: 0.6, flatShading: true });
-  const eyeM = new THREE.MeshBasicMaterial({ color: 0xff3020 });
-  const glowM = new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-  const B = (seed) => blobGeo(1, 0.1, seed);
+  const gold = hide(0x7a5208, 0xe0b030, { metal: 0.75, rough: 0.32, scale: 9, coat: 0.3 });
+  const dark = hide(0x4a3206, 0xa87c18, { metal: 0.7, rough: 0.4, scale: 9 });
+  const wingM = hide(0x8a6410, 0xe8c048, { metal: 0.5, rough: 0.4, scale: 2.2, side: THREE.DoubleSide });
+  const bone = new THREE.MeshStandardMaterial({ color: 0xf0e6c8, roughness: 0.4 });
+  const eyeM = hot(0xff2a18, 4);
+  const glowM = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff27a).multiplyScalar(4), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+  const B = () => ball;
   const root = new THREE.Group();
   const body = pivot(root, 0, 6.2, 0);
   part(body, B(1), gold, 0, 0, 0, 2.5, 2.7, 2.5);
@@ -175,7 +190,7 @@ export function makeGhidorah() {
       const seg = i === 0 ? base : pivot(prev, 0, 1.05, 0);
       if (i > 0) seg.rotation.x = b; else seg.rotation.x += b;
       c += b;
-      part(seg, B(10 + i), gold, 0, 0.5, 0, r, 0.75, r);
+      part(seg, B(10 + i), gold, 0, 0.5, 0, r, 0.95, r);
       if (i % 2 === 0) { const sp = part(seg, coneGeo, dark, 0, 0.5, -r, 0.14, 0.7, 0.14); sp.rotation.x = -Math.PI / 2; }
       segs.push({ seg, b: seg.rotation.x }); prev = seg; r *= 0.95;
     });
@@ -211,7 +226,7 @@ export function makeGhidorah() {
     bend.forEach((b, i) => {
       const seg = i === 0 ? prev : pivot(prev, 0, 0, -1.7);
       seg.rotation.x = b;
-      part(seg, B(30 + i), gold, 0, 0, -0.85, r, r, 1.25);
+      part(seg, B(30 + i), gold, 0, 0, -0.85, r, r, 1.5);
       segs.push(seg); prev = seg; r *= 0.84;
     });
     for (let i = 0; i < 6; i++) { const sp = part(prev, coneGeo, bone, 0, 0, -1.6, 0.12, 0.9, 0.12); sp.rotation.set(Math.PI / 2 + Math.cos(i) * 0.8, 0, Math.sin(i * 1.05) * 0.8); }

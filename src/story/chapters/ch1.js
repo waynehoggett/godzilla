@@ -3,7 +3,7 @@ import { StoryScene, Walker, Turret } from '../storyScene.js';
 import { clamp, turnToward } from '../../core/scene.js';
 import { setupSky, ground } from '../../world/sky.js';
 import { Ocean } from '../../world/ocean.js';
-import { palms, beacon } from '../../world/props.js';
+import { palms, beacon, hills } from '../../world/props.js';
 import { makeGodzilla } from '../../models/godzilla.js';
 import { makeZero } from '../../models/vehicles.js';
 import { makeKoichi, makeSoldier } from '../../models/people.js';
@@ -20,6 +20,7 @@ export class Ch1 extends StoryScene {
     this.sky = setupSky(s, 'night', { near: 40, far: 720, sunI: 3.4, amb: 1.6, shadow: 90 }, game.renderer);
     ground(s, 0x4d4a3a, 1200);
     this.ocean = new Ocean(s, { y: -3, amp: 0.6, deep: 0x030d16, shallow: 0x123c50, sunCol: 0x9db4e0 });
+    this.hills = hills(s, { z: 1250, x: -200, size: 1800, height: 260 });
     palms(s, 110, 170, 520, 0.9, (x, z) => Math.hypot(x - 30, z - 110) > 60);
     const strip = new THREE.Mesh(new THREE.BoxGeometry(30, 0.1, 320), new THREE.MeshStandardMaterial({ color: 0x35332c, roughness: 1 }));
     strip.position.set(42, 0.05, 110); strip.rotation.y = 0.3; s.add(strip);
@@ -147,6 +148,7 @@ export class Ch1 extends StoryScene {
     if (G.speed > 0) { G.stepT -= dt; if (G.stepT <= 0) { G.stepT = 0.55; const k = clamp(1 - dP / 160, 0.1, 1); this.audio.step(0.5 * k); this.fx.shake(0.5 * k); } }
     this.beacon.material.opacity = 0.25 + Math.sin(this.t * 4) * 0.1;
     this.focus.copy(w.pos);
+    this.hills.update(this.camera);
     this.ocean.update(dt, this.camera);
     if (this.phase !== 'cockpit') this.ui.meter('Stamina', w.stamina, '#e9c46a'); else this.ui.meter(null);
   }

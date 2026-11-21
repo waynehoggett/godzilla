@@ -6,7 +6,7 @@ import { setupSky, ground } from '../../world/sky.js';
 import { streetCity } from '../../world/city.js';
 import { beacon } from '../../world/props.js';
 import { makeGodzilla } from '../../models/godzilla.js';
-import { makeKoichi, makeNoriko, makeCivilian } from '../../models/people.js';
+import { makeKoichi, makeNoriko, Crowd } from '../../models/people.js';
 
 const V = THREE.Vector3;
 const _a = new V(), _b = new V();
@@ -26,14 +26,14 @@ export class Ch4 extends StoryScene {
       const w2 = 20 + Math.random() * 10;
       lots.push({ x: side * (48 + w2 / 2), z: z + 6, w: w2, d: 26, h: 12 + Math.random() * 22 });
     }
-    this.city = streetCity(s, lots);
+    this.city = streetCity(s, lots, { interiors: !game.lite });
     const rail = new THREE.Mesh(new THREE.BoxGeometry(3, 0.12, 640), new THREE.MeshStandardMaterial({ color: 0x55524c, roughness: 1 })); rail.position.set(0, 0.06, 250); s.add(rail);
 
     this.g = makeGodzilla(); this.g.root.scale.setScalar(5); s.add(this.g.root);
     this.G = { pos: new V(-66, 0, 150), yaw: 0, stepT: 0, speed: 0 };
     this.beam = new Beam(s);
-    this.crowd = [];
-    for (let i = 0; i < 24; i++) { const p = makeCivilian(i); p.sp = 7 + Math.random() * 3; p.root.position.set((Math.random() - 0.5) * 18, 0, 20 + Math.random() * 100); p.root.rotation.y = Math.PI; s.add(p.root); this.crowd.push(p); }
+    this.crowd = new Crowd(s, 34);
+    for (const p of this.crowd.members) { p.speed = 7 + Math.random() * 3; p.x = (Math.random() - 0.5) * 18; p.z = 20 + Math.random() * 100; p.yaw = Math.PI; }
     this.noriko = makeNoriko(); this.noriko.root.position.set(5, 0, NORIKO_Z); this.noriko.root.rotation.y = Math.PI; s.add(this.noriko.root); this.nSpeed = 0;
     this.w = new Walker(s, makeKoichi(), 0, 0);
     this.beacon = beacon(s, 5, NORIKO_Z, 0xffe9a0, 30, 1.2);
@@ -157,11 +157,12 @@ export class Ch4 extends StoryScene {
       }
     } else if (ph === 'blast') w.cam(this.camera, dt, 12, 5.5);
     this.noriko.update(dt, this.nSpeed);
-    for (const p of this.crowd) {
-      const r = p.root.position; r.z -= p.sp * dt; p.update(dt, p.sp);
-      if (ph === 'find' ? r.z < w.pos.z - 25 : r.z < w.pos.z - 80) { r.z = w.pos.z + (ph === 'find' ? 50 + Math.random() * 60 : 10 + Math.random() * 30); r.x = (Math.random() - 0.5) * 20; }
-      p.root.visible = ph !== 'cloud';
+    for (const p of this.crowd.members) {
+      p.z -= p.speed * dt;
+      if (ph === 'find' ? p.z < w.pos.z - 25 : p.z < w.pos.z - 80) { p.z = w.pos.z + (ph === 'find' ? 50 + Math.random() * 60 : 10 + Math.random() * 30); p.x = (Math.random() - 0.5) * 20; }
     }
+    this.crowd.visible = ph !== 'cloud';
+    this.crowd.update(dt);
 
     // Godzilla
     g.root.position.set(G.pos.x, 0, G.pos.z); g.root.rotation.y = G.yaw;

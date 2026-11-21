@@ -10,7 +10,7 @@ import * as PPL from './models/people.js';
 const MAKERS = {
   godzilla: () => makeGodzilla(), mecha: () => makeGodzilla({ mecha: true }), kong: makeKong, rodan: makeRodan, mothra: makeMothra, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
-  mine: () => ({ root: VEH.makeMine() }), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko,
+  mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
 };
 export class ViewerScene extends GameScene {
   constructor(game, q) {
@@ -20,7 +20,8 @@ export class ViewerScene extends GameScene {
     ground(this.scene, 0x6a6f66, 400);
     this.m = MAKERS[q.get('m') || 'godzilla']();
     this.scene.add(this.m.root);
-    this.a = +(q.get('a') || 0.7); this.dist = +(q.get('d') || 22); this.h = +(q.get('h') || 6);
+    this.m.root.position.y = +(q.get('y') || 0);
+    this.q = q; this.a = +(q.get('a') || 0.7); this.dist = +(q.get('d') || 22); this.h = +(q.get('h') || 6);
     if (this.m.set) Object.assign(this.m.set, JSON.parse(q.get('set') || '{}'));
     this.spin = q.has('spin');
   }
@@ -28,6 +29,6 @@ export class ViewerScene extends GameScene {
     if (this.spin) this.a += dt * 0.5;
     this.camera.position.set(Math.sin(this.a) * this.dist, this.h + this.dist * 0.15, Math.cos(this.a) * this.dist);
     this.camera.lookAt(0, this.h, 0);
-    if (this.m.update) this.m.update(dt, 4);
+    if (this.m.update) this.m.update(dt, +(this.q.get('speed') ?? 4));
   }
 }

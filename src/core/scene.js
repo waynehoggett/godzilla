@@ -39,6 +39,8 @@ export class GameScene {
     this.audio.engine(false);
     this.input.tapFire = false;
     if (this.city && this.city.dispose) this.city.dispose();
+    if (this.crowd && this.crowd.dispose) this.crowd.dispose();
+    if (this.hills) this.hills.dispose();
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) {

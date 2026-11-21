@@ -4,7 +4,7 @@ import { Beam } from '../core/fx.js';
 import { setupSky, ground } from '../world/sky.js';
 import { Ocean } from '../world/ocean.js';
 import { generatedCity } from '../world/city.js';
-import { palms } from '../world/props.js';
+import { palms, hills } from '../world/props.js';
 import { makeGodzilla } from '../models/godzilla.js';
 import { makeWarship } from '../models/vehicles.js';
 import { RIVALS, LADDER } from './roster.js';
@@ -59,7 +59,7 @@ export class BrawlScene extends GameScene {
     if (this.arena === 'city') {
       this.sky = setupSky(s, 'night', { near: 200, far: 1500, sunI: 4.2, amb: 2.2, env: 3, bot: 0x33405e, shadow: 280 }, this.game.renderer);
       const t0 = performance.now();
-      this.city = generatedCity(s, { clear: (x, z) => Math.hypot(x, z) < 60 || (Math.abs(x) < 20 && Math.abs(z) < 140) });
+      this.city = generatedCity(s, { interiors: this.game.lite ? false : 'average', clear: (x, z) => Math.hypot(x, z) < 60 || (Math.abs(x) < 20 && Math.abs(z) < 140) });
       this.arenaR = this.city.radius - 14;
       console.info('city built in', Math.round(performance.now() - t0), 'ms', this.city.b.length, 'towers');
     } else if (this.arena === 'bay') {
@@ -75,6 +75,7 @@ export class BrawlScene extends GameScene {
       ground(s, 0x55693a, 250, 0.1);
       this.ocean = new Ocean(s, { y: -4, amp: 0.8, deep: 0x1a2c44, shallow: 0x7a6a78, sunCol: 0xffb072, sunDir: [-0.7, 0.35, -0.5] });
       palms(s, 90, 150, 400, 1);
+      this.hills = hills(s, { z: -1500, x: 300, size: 2200, height: 330, seed: 9 });
     }
   }
 
@@ -442,6 +443,7 @@ export class BrawlScene extends GameScene {
     this.focus.set((P.pos.x + R.pos.x) / 2, this.gy, (P.pos.z + R.pos.z) / 2);
     if (this.ocean) this.ocean.update(dt, this.camera);
     if (this.city) this.city.update(dt);
+    if (this.hills) this.hills.update(this.camera);
     if (this.arena === 'bay' && Math.random() < 0.3) { this.fx.splash(_a.set(P.pos.x + (Math.random() - 0.5) * 24, 1, P.pos.z + (Math.random() - 0.5) * 24), 0.8); if (R.alt < 10) this.fx.splash(_a.set(R.pos.x + (Math.random() - 0.5) * 30, 1, R.pos.z + (Math.random() - 0.5) * 30), 0.8); }
 
     this.vig = Math.max(0, this.vig - dt * 2); this.ui.vignette(this.vig);
