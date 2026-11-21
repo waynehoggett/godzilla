@@ -4,13 +4,14 @@ import { clamp } from '../../core/scene.js';
 import { setupSky } from '../../world/sky.js';
 import { Ocean } from '../../world/ocean.js';
 import { houses, beacon } from '../../world/props.js';
+import { mix, color } from 'three/tsl';
 import { TerrainGenerator } from 'three/addons/generators/TerrainGenerator.js';
 import { ForestGenerator } from 'three/addons/generators/ForestGenerator.js';
 import { makeShinden, makeWarship } from '../../models/vehicles.js';
 import { Hunter } from '../hunter.js';
 
 const V = THREE.Vector3;
-const _a = new V();
+const _a = new V(), _f = new V();
 const START_Z = -430, TRENCH_Z = 1650;
 
 // Fly the Shinden: provoke Godzilla on land and lead him out to the Sagami Trench.
@@ -27,8 +28,11 @@ export class Ch5 extends StoryScene {
     // mountains behind the coastal plain, carpeted with trees
     this.terrain = new TerrainGenerator({ seed: 4, size: 7000, segments: 200, heightScale: 620, frequency: 0.00035, seaLevel: 0.12 });
     const range = this.terrain.build(); range.position.set(0, -6, -4700); s.add(range);
-    this.forest = new ForestGenerator({ count: 90000, radius: 9, height: 26, from: 2600, to: 4200, minScale: 0.7, maxScale: 1.6, densityFrequency: 0.0009 });
-    const trees = this.forest.build(this.terrain); trees.position.copy(range.position); s.add(trees);
+    // the generator paints bare rock and snow; these are low wooded hills, so pull the ground toward the forest floor
+    this.terrain.material.colorNode = mix(this.terrain.material.colorNode, color(0x3a4d2c), 0.8);
+    // carpet the hills from the plain to near the tops, so no tree stands alone against the haze
+    this.forest = new ForestGenerator({ count: game.lite ? 70000 : 120000, radius: 9, height: 26, from: 1700, to: 3100, minScale: 0.7, maxScale: 1.6, densityFrequency: 0.0003, altitudeMin: 0.02, altitudeMax: 0.92, minSlope: 0.3 });
+    const trees = this.forest.build(this.terrain); trees.position.copy(range.position); s.add(trees); this.treeOrigin = trees.position;
     for (const x of [-260, 260]) { const d = makeWarship(70); d.root.position.set(x, 0, TRENCH_Z + 80); d.root.rotation.y = Math.PI / 2; s.add(d.root); }
     this.mark = beacon(s, 0, TRENCH_Z, 0xffe9a0, 420, 14);
     this.plane = new Plane(this, makeShinden(), 330, 95, 80, Math.atan2(-330, START_Z - 80));
@@ -70,7 +74,7 @@ export class Ch5 extends StoryScene {
     this.ui.bar('R', 'Godzilla\'s attention', H.aggro);
     this.mark.material.opacity = 0.22 + Math.sin(this.t * 3) * 0.08;
     this.ocean.update(dt, this.camera);
-    this.forest.setCameraPosition(this.camera.position);
+    this.forest.setCameraPosition(_f.copy(this.camera.position).sub(this.treeOrigin)); // the cull works in the forest's own coordinates
     if (H.pos.z < -1250) this.fail('Godzilla walked on into the city.');
     if (H.pos.z >= TRENCH_Z && live) { H.cancelRay(); this.say('Noda', 'He is over the trench! Destroyers — begin your run!', 4); this.win(3); }
   }

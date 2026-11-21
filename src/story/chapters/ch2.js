@@ -3,6 +3,7 @@ import { StoryScene, Turret } from '../storyScene.js';
 import { setupSky } from '../../world/sky.js';
 import { Ocean } from '../../world/ocean.js';
 import { makeShinsei, makeMine, makeGun } from '../../models/vehicles.js';
+import { makeShoal } from '../../models/fish.js';
 
 const V = THREE.Vector3;
 const WAVES = [3, 4, 7];
@@ -17,7 +18,7 @@ export class Ch2 extends StoryScene {
     this.ocean = new Ocean(this.scene, { amp: 0.8 });
     this.boat = makeShinsei(); this.scene.add(this.boat.root);
     this.turret = new Turret(this, makeGun());
-    this.mines = []; this.cleared = 0; this.total = WAVES.reduce((a, b) => a + b, 0); this.wave = 0; this.fish = [];
+    this.mines = []; this.cleared = 0; this.total = WAVES.reduce((a, b) => a + b, 0); this.wave = 0;
     this.ui.objective('Shoot the mines before they reach the boat');
     this.ui.controls([{ b: 'a', label: 'Fire', key: 'Space / Click' }], 'Aim (or mouse)');
     this.audio.music('menu'); this.audio.engine(true, 'boat'); this.audio.engineSet(0.9, 0.12);
@@ -57,12 +58,7 @@ export class Ch2 extends StoryScene {
     this.go('fish'); this.ui.objective(''); this.turret.hide();
     this.say('Akitsu', 'That\'s the lot. Not bad for a pilot.', 3.5);
     this.after(4, () => {
-      const mat = new THREE.MeshStandardMaterial({ color: 0xd8d2c8, roughness: 0.6 }), geo = new THREE.SphereGeometry(1, 8, 6);
-      for (let i = 0; i < 46; i++) {
-        const f = new THREE.Mesh(geo, mat); f.scale.set(0.5, 0.35, 1.5 + Math.random());
-        f.position.set((Math.random() - 0.5) * 90, -6 - Math.random() * 8, 14 + Math.random() * 70); f.rotation.y = Math.random() * 6;
-        this.scene.add(f); this.fish.push(f);
-      }
+      this.shoal = makeShoal(this.scene, 84, () => { const a = Math.random() * 6.283, r = 7 + Math.sqrt(Math.random()) * 36; return [Math.cos(a) * r * 1.25, 34 + Math.sin(a) * r]; });
       this.audio.music('dread');
       this.say('Noda', 'Deep-sea fish… floating belly up. Something very large is driving them to the surface.', 6);
     });
@@ -92,7 +88,7 @@ export class Ch2 extends StoryScene {
         if (!this.mines.length && this.phase === 'sweep' && !this.over) { this.wave++; if (this.wave < WAVES.length) this.after(2.2, () => this.spawnWave()); else this.finish(); }
       }
     }
-    for (const f of this.fish) f.position.y = Math.min(this.ocean.height(f.position.x, f.position.z) + 0.1, f.position.y + dt * 2.2);
+    if (this.shoal) this.shoal.update(dt, this.ocean, (f) => { if (Math.random() < 0.5) this.fx.splash(_a.set(f.x, f.y, f.z), 0.35 * f.size); });
     if (this.phase === 'sweep') this.ui.meter(`Mines cleared ${this.cleared} / ${this.total}`, this.cleared / this.total, '#e9c46a'); else this.ui.meter(null);
   }
 }

@@ -6,6 +6,9 @@ import { makeRodan, makeMecha, makeGhidorah, makeKong } from './models/rivals.js
 import * as VEH from './models/vehicles.js';
 import * as PPL from './models/people.js';
 import * as FOL from './world/foliage.js';
+import { fishGeometry } from './models/fish.js';
+
+const fish = (kind) => ({ root: new THREE.Mesh(fishGeometry(kind), new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.1, clearcoat: 0.7, side: THREE.DoubleSide })) });
 
 const tree = (model) => { const root = new THREE.Group(); FOL.plant(root, model, [{ x: 0, y: 0, z: 0 }], { shadow: true }); return { root }; };
 
@@ -14,6 +17,7 @@ const MAKERS = {
   godzilla: () => makeGodzilla(), mecha: makeMecha, kong: makeKong, rodan: makeRodan, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
   mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), broadleaf: () => tree(FOL.broadleaf(2, { height: 11, spread: 0.7 })), broadleaf2: () => tree(FOL.broadleaf(3, { height: 8, spread: 0.9 })), palm: () => tree(FOL.palm(1)), bush: () => tree(FOL.bush(1)), fartree: () => tree(FOL.farTree(1)),
+  alfonsino: () => fish('alfonsino'), grenadier: () => fish('grenadier'), lantern: () => fish('lantern'),
   koichi: () => PPL.makeKoichi('pilot'), civil: () => PPL.makeKoichi('civil'), noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
 };
 export class ViewerScene extends GameScene {
