@@ -88,10 +88,11 @@ export class FX {
     this.burst(pos, Math.ceil(n / 2), 7 * s, 2.4, 3 * s, 0x8a8478, 0x3a3630, { up: 0.5, grow: 1, drag: 1, spread: 5 * s });
   }
   // Ground telegraph: ring + disc that fills as the impact approaches.
-  warn(pos, radius, dur, color = 0xff3b1f) {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false, fog: false });
+  warn(pos, radius, dur, color = 0xff3b1f, fill = true) {
+    // drawn over the ground and water (no depth test) so waves and rubble never cut it up
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false, depthTest: false, fog: false });
     const ring = new THREE.Mesh(this.ringGeo, mat), disc = new THREE.Mesh(this.discGeo, mat.clone());
-    disc.material.opacity = 0.28;
+    disc.material.opacity = 0.16; disc.visible = fill; ring.renderOrder = disc.renderOrder = 6;
     const g = new THREE.Group(); g.add(ring, disc);
     g.position.copy(pos); g.position.y += 0.25; ring.scale.setScalar(radius);
     this.scene.add(g);

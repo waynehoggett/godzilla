@@ -8,6 +8,7 @@ import { palms, hills } from '../world/props.js';
 import { makeGodzilla } from '../models/godzilla.js';
 import { makeWarship } from '../models/vehicles.js';
 import { RIVALS, LADDER } from './roster.js';
+import { Bot } from './bot.js';
 
 const V = THREE.Vector3;
 const ARENA_R = 330;
@@ -37,13 +38,15 @@ export class BrawlScene extends GameScene {
 
     const c = this.cfg;
     this.m = c.make(); this.m.root.scale.setScalar(c.scale); this.scene.add(this.m.root);
-    this.R = { pos: new V(0, 0, 115), alt: c.flying ? c.hover : 0, yaw: Math.PI, hp: c.hp, max: c.hp, state: 'intro', st: 0, vel: new V(), cds: {}, think: 1.0, circ: 1, circT: 3, tire: 15, hurtT: 0, poise: c.poise, h: this.m.height * c.scale, radius: c.radius, fly: c.flying ? 1 : 0, last: null, rest: 0, rage: false, speedNow: 0, inv: 0 };
+    this.R = { pos: new V(0, 0, 115), alt: c.flying ? c.hover : 0, yaw: Math.PI, hp: c.hp, max: c.hp, state: 'intro', st: 0, vel: new V(), cds: {}, think: 1.0, circ: 1, circT: 3, tire: 15, hurtT: 0, poise: c.poise, h: this.m.height * c.scale, radius: c.radius, fly: c.flying ? 1 : 0, last: null, rest: 0, rage: false, speedNow: 0, inv: 0, lock: 0 };
     for (const a of c.attacks) this.R.cds[a.id] = Math.random() * 2;
 
     this.pBeam = new Beam(this.scene);
     this.rBeam = [0, 1, 2].map(() => new Beam(this.scene, c.beamColor, 0xfffbe0));
     this.rWarn = [0, 1, 2].map(() => new Beam(this.scene, 0xff3020, 0xff9080));
     this.shots = []; this.vig = 0; this.phase = 'intro';
+    this.stats = { dealt: 0, taken: 0, hitsLanded: 0, hitsTaken: 0, blocked: 0, knockdowns: 0, beam: 0 };
+    if (opts.bot) { this.bot = new Bot(this, opts.bot); this.input = this.bot; }
     this.stop = 0; this.slow = 1; this.kick = new V(); this.fov = 0; this.scorch = [];
     this.missileGeo = new THREE.ConeGeometry(1.6, 9, 8).rotateX(Math.PI / 2);
     this.missileMat = new THREE.MeshStandardMaterial({ color: 0xd8dde4, metalness: 0.6, roughness: 0.4 });
@@ -54,7 +57,7 @@ export class BrawlScene extends GameScene {
     this.ui.controls([{ b: 'a', label: 'Claw', key: 'Space' }, { b: 'b', label: 'Tail', key: 'K' }, { b: 'c', label: 'Heat Ray', key: 'Hold E' }, { b: 'd', label: 'Block / Dash', key: 'Shift' }, { b: 'e', label: 'Roar', key: 'R' }]);
     this.ui.banner('GODZILLA', 'versus ' + c.name, 2400);
     this.audio.music('battle');
-    this.after(0.8, () => this.audio.roar(0.8, c.pitch, 1.6));
+    this.after(0.8, () => this.audio.roar(0.8, c.pitch, 1.6, this.key));
     this.after(2.6, () => { this.ui.banner('FIGHT', '', 900); this.audio.roar(1, 1); this.g.move('roar'); this.phase = 'fight'; this.R.state = 'space'; this.R.st = 0; });
     this.updateCamera(1, true);
   }
@@ -118,15 +121,15 @@ export class BrawlScene extends GameScene {
     if (this.phase !== 'fight' || R.inv > 0) return false;
     let k = R.state === 'down' ? 1.25 : 1;
     if (R.state === 'block' && !o.beam) { k = 0.3; this.audio.block(); this.center(R, _a); this.fx.burst(_a, 6, 30, 0.3, 1, 0xffffff, 0x88aaff); }
-    R.hp -= dmg * k; R.hurtT = 0.25;
+    R.hp -= dmg * k; R.hurtT = 0.25; this.stats.dealt += dmg * k; if (o.beam) this.stats.beam += dmg * k; else this.stats.hitsLanded++;
     if (!o.quiet) {
       this.center(R, _a);
       this.impact(_a.clone(), o.heavy ? 3 : 1.4, from);
-      this.P.energy = Math.min(100, this.P.energy + 6);
+      this.P.energy = Math.min(100, this.P.energy + 4);
       this.P.hits++; this.P.hitsT = 1.7; this.ui.combo(this.P.hits);
     }
     if (o.kb) { _b.set(R.pos.x - from.x, 0, R.pos.z - from.z).normalize(); R.vel.addScaledVector(_b, o.kb * (R.state === 'block' ? 0.3 : 1)); }
-    if (R.state !== 'block') R.poise -= o.poise || 0;
+    if (R.state !== 'block' && R.lock <= 0) R.poise -= o.poise || 0;
     // heavy blows break a wind-up; an empty poise bar puts the rival on the ground
     if (R.hp > 0 && R.state !== 'down') {
       if (R.poise <= 0) this.knockdown();
@@ -138,7 +141,7 @@ export class BrawlScene extends GameScene {
   }
   knockdown() {
     const R = this.R;
-    this.cancelAttack(); R.state = 'down'; R.st = 0; R.poise = this.cfg.poise;
+    this.cancelAttack(); R.state = 'down'; R.st = 0; R.poise = this.cfg.poise; this.stats.knockdowns++;
     if (!this.m.react('knock')) this.m.react('hit');
     this.ui.banner('', 'Staggered', 700); this.audio.boom(0.8);
   }
@@ -148,7 +151,7 @@ export class BrawlScene extends GameScene {
     const P = this.P;
     if (P.inv > 0 || this.phase !== 'fight') return false;
     const blocked = P.blocking && !unblockable, k = blocked ? 0.22 : 1;
-    P.hp -= dmg * k; P.inv = 0.35; P.hurtT = 0.3; this.vig = 0.9 * k; P.hits = 0; this.ui.combo(0);
+    P.hp -= dmg * k; P.inv = 0.35; P.hurtT = 0.3; this.stats.taken += dmg * k; this.stats.hitsTaken++; if (blocked) this.stats.blocked++; this.vig = 0.45 * k; P.hits = 0; this.ui.combo(0);
     _b.set(P.pos.x - from.x, 0, P.pos.z - from.z).normalize(); P.vel.addScaledVector(_b, kb * k);
     this.center(P, _a);
     if (blocked) { this.audio.block(); this.fx.burst(_a, 8, 34, 0.3, 1.2, 0xffffff, 0x88aaff); this.fx.shake(0.5); this.stop = Math.max(this.stop, 0.04); }
@@ -160,12 +163,12 @@ export class BrawlScene extends GameScene {
   burnPlayer(amount, blockable) {
     const P = this.P;
     if (this.phase !== 'fight' || P.inv > 0.2) return;
-    P.hp -= amount * (blockable && P.blocking ? 0.3 : 1); P.hurtT = 0.15; this.vig = Math.max(this.vig, 0.5);
+    const burn = amount * (blockable && P.blocking ? 0.3 : 1); P.hp -= burn; this.stats.taken += burn; P.hurtT = 0.15; this.vig = Math.max(this.vig, 0.3);
     if (P.hp <= 0) this.ko(false);
   }
   ko(playerWon) {
     if (this.phase !== 'fight') return;
-    this.phase = 'ko'; this.won = playerWon; this.hideRivalBeams(); this.pBeam.off();
+    this.phase = 'ko'; this.won = playerWon; this.stats.time = this.t - 2.6; this.stats.hpLeft = Math.max(0, this.P.hp); this.hideRivalBeams(); this.pBeam.off();
     this.P.state = playerWon ? 'idle' : 'ko'; this.R.state = playerWon ? 'ko' : 'space'; this.R.st = 0; this.P.charge = 0;
     if (playerWon) this.m.react('death'); else this.g.rig.stop();
     this.slow = 0.22; this.koT = 0; this.stop = 0.12;
@@ -252,7 +255,7 @@ export class BrawlScene extends GameScene {
       const end = from.clone().addScaledVector(dir, len), target = _b.clone();
       if (segDist(target, from, end) < R.radius * 1.05) {
         end.copy(target);
-        this.hurtRival(52 * dt * (0.6 + P.charge * 0.5), P.pos, { quiet: true, beam: true, poise: 60 * dt });
+        this.hurtRival(38 * dt * (0.6 + P.charge * 0.5), P.pos, { quiet: true, beam: true, poise: 22 * dt });
         if (!P.beamBroke && P.charge >= 0.7) { P.beamBroke = true; this.hurtRival(6, P.pos, { heavy: true, beam: true, poise: 30, kb: 30 }); }
         if (Math.random() < 0.6) { this.fx.hdr = 3; this.fx.burst(end, 3, 60, 0.5, 2, 0xbfe6ff, 0x2a6cff, { grav: 10 }); this.fx.hdr = 1; }
       } else if (len < 619) {
@@ -270,7 +273,7 @@ export class BrawlScene extends GameScene {
       g.root.rotation.z = damp(g.root.rotation.z, 1.45, 2, dt);
     }
     if (P.state !== 'beam') this.pBeam.off();
-    if (P.state !== 'charge' && P.state !== 'beam') P.energy = Math.min(100, P.energy + 6 * dt);
+    if (P.state !== 'charge' && P.state !== 'beam') P.energy = Math.min(100, P.energy + 4.5 * dt);
 
     if (P.state !== 'ko') P.yaw = turnToward(P.yaw, want, turn * dt);
     let moving = false;
@@ -290,7 +293,7 @@ export class BrawlScene extends GameScene {
     set.hurt = Math.max(0, P.hurtT * 3); set.lean = P.blocking ? -0.2 : 0;
     const dy = this.gy + R.alt + R.h * 0.5 - (this.gy + 45);
     set.headPitch = damp(set.headPitch, clamp(-Math.atan2(dy, Math.max(30, dist)) * 0.7, -0.7, 0.3), 5, dt);
-    g.flash(Math.max(0, P.hurtT * 2.5));
+    g.flash(Math.max(0, P.hurtT * 1.1));
     if (this.city && this.phase !== 'intro') this.city.smash(P.pos.x, P.pos.z, 9, this.fx, this.audio);
   }
 
@@ -318,13 +321,13 @@ export class BrawlScene extends GameScene {
     const R = this.R, P = this.P, m = this.m, c = this.cfg, set = m.set;
     const dx = P.pos.x - R.pos.x, dz = P.pos.z - R.pos.z, dist = Math.hypot(dx, dz) || 1, want = Math.atan2(dx, dz), nx = dx / dist, nz = dz / dist;
     R.st += dt; R.hurtT -= dt; R.inv -= dt; R.rest -= dt;
-    R.poise = Math.min(c.poise, R.poise + 7 * dt);
+    R.lock -= dt; R.poise = Math.min(c.poise, R.poise + 10 * dt);
     for (const k in R.cds) R.cds[k] -= dt * (R.rage ? 1.4 : 1);
     let walk = 0;
     const speedMul = (0.85 + this.diff * 0.06) * (R.rage ? 1.15 : 1);
     // rage: below 30% health it roars once and fights faster
     if (!R.rage && R.hp > 0 && R.hp < R.max * 0.3 && this.phase === 'fight' && (R.state === 'space')) {
-      R.rage = true; R.state = 'roar'; R.st = 0; R.inv = 1.0; if (m.moves.roar) m.move('roar'); else if (m.moves.hurricane) m.move('hurricane'); this.audio.roar(1, c.pitch, 1.8); this.fx.shake(1.6);
+      R.rage = true; R.state = 'roar'; R.st = 0; R.inv = 1.0; if (m.moves.roar) m.move('roar'); else if (m.moves.hurricane) m.move('hurricane'); this.audio.roar(1, c.pitch, 1.8, this.key); this.fx.shake(1.6);
       this.ui.banner('', c.name + ' is enraged', 1400);
       if (dist < 150) this.hurtPlayer(4, R.pos, 60, true);
     }
@@ -360,7 +363,7 @@ export class BrawlScene extends GameScene {
     } else if (R.state === 'down') {
       // on the ground and open; brief invulnerability as it gets back up
       R.alt = Math.max(0, R.alt - 90 * dt);
-      if (R.st >= 1.9) { R.state = 'space'; R.st = 0; R.inv = 0.5; R.think = 0.5; R.rest = 0.6; m.stop(); }
+      if (R.st >= 1.7) { R.state = 'space'; R.st = 0; R.inv = 0.5; R.lock = 4.5; R.think = 0.4; R.rest = 0.5; m.stop(); }
     } else if (R.state === 'land') {
       R.alt = damp(R.alt, 0, 2.6, dt);
       if (R.st >= 4.2) { R.state = 'space'; R.st = 0; }
@@ -373,7 +376,7 @@ export class BrawlScene extends GameScene {
     set.walk = damp(set.walk, walk, 8, dt); set.speed = R.speedNow;
     set.hurt = Math.max(0, R.hurtT * 3) + (R.state === 'down' && !m.rig.busy() ? 1.5 : 0);
     if (c.flying) { R.fly = damp(R.fly, R.alt > 10 ? 1 : 0, 5, dt); set.fly = R.fly; set.flap = R.alt > 4 ? 1 : 0.2; }
-    m.flash(Math.max(0, R.hurtT * 4) + (R.rage ? 0.18 + Math.sin(this.t * 6) * 0.08 : 0));
+    m.flash(Math.max(0, R.hurtT * 1.6) + (R.rage ? 0.12 + Math.sin(this.t * 6) * 0.05 : 0));
     if (this.city && R.alt < 12 && this.phase !== 'intro') this.city.smash(R.pos.x, R.pos.z, 9, this.fx, this.audio);
   }
 
@@ -409,7 +412,7 @@ export class BrawlScene extends GameScene {
         else if (!A.warned) {
           A.warned = true; A.from.copy(R.pos); A.alt0 = R.alt;
           this.fx.warn(_a.set(A.target.x, gyv, A.target.z), d.r, A.wind * 0.38 + A.act * 0.8);
-          this.audio.roar(0.5, c.pitch, 0.9); if (set.dive !== undefined) set.dive = 1;
+          this.audio.roar(0.5, c.pitch, 0.9, this.key); if (set.dive !== undefined) set.dive = 1;
         }
       } else if (ph === 1) {
         if (!A.warned) { A.warned = true; A.from.copy(R.pos); A.alt0 = R.alt; }
@@ -423,9 +426,9 @@ export class BrawlScene extends GameScene {
     } else if (d.type === 'gust') {
       if (ph === 0) {
         if (c.flying) R.alt = damp(R.alt, 18, 3, dt);
-        if (!A.warned) { A.warned = true; this.fx.warn(_a.set(R.pos.x, gyv, R.pos.z), d.r, A.wind, 0xffd27a); }
+        if (!A.warned) { A.warned = true; this.fx.warn(_a.set(R.pos.x, gyv, R.pos.z), d.r, A.wind, 0xffd27a, false); }
       } else if (ph === 1 && !A.fired) {
-        A.fired = true; this.audio.whoosh(1.6); this.audio.roar(0.7, c.pitch, 1.2);
+        A.fired = true; this.audio.whoosh(1.6); this.audio.roar(0.7, c.pitch, 1.2, this.key);
         this.center(R, _a); _b.set(P.pos.x - R.pos.x, 0, P.pos.z - R.pos.z).normalize();
         for (let i = 0; i < 40; i++) { _c.copy(_b).multiplyScalar(140 + Math.random() * 120); _c.x += (Math.random() - 0.5) * 120; _c.y = (Math.random() - 0.5) * 40; _c.z += (Math.random() - 0.5) * 120; this.fx.spawn(_a, _c, 0.9, 2.2, 0xe8e0d0, 0x8a8478, 0, 0.5, 1); }
         if (dist < d.r) this.hurtPlayer(d.dmg, R.pos, d.kb);
@@ -532,6 +535,7 @@ export class BrawlScene extends GameScene {
 
   update(dt) {
     const P = this.P, R = this.R;
+    if (this.bot) this.bot.update(dt);
     this.updatePlayer(dt);
     this.updateRival(dt);
     this.updateHazards(dt);
@@ -556,7 +560,7 @@ export class BrawlScene extends GameScene {
     if (this.hills) this.hills.update(this.camera);
     if (this.arena === 'bay' && Math.random() < 0.3) { this.fx.splash(_a.set(P.pos.x + (Math.random() - 0.5) * 24, 1, P.pos.z + (Math.random() - 0.5) * 24), 0.8); if (R.alt < 10) this.fx.splash(_a.set(R.pos.x + (Math.random() - 0.5) * 30, 1, R.pos.z + (Math.random() - 0.5) * 30), 0.8); }
 
-    this.vig = Math.max(0, this.vig - dt * 2); this.ui.vignette(this.vig);
+    this.vig = Math.max(0, this.vig - (this.realDt || dt) * 2.4); this.ui.vignette(this.vig);
     this.ui.bar('L', 'Godzilla', P.hp / P.max, P.energy / 100);
     this.ui.bar('R', this.cfg.name + (R.rage ? ' — enraged' : ''), R.hp / R.max);
   }

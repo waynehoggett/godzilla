@@ -14,7 +14,7 @@ export class City {
     b.alive = false; b.tx = (Math.random() - 0.5) * 0.3; b.tz = (Math.random() - 0.5) * 0.3;
     this.falling.push(b);
     if (fx) { _p.set(b.x, b.h * 0.35, b.z); fx.debris(_p, 22, Math.max(1, b.h / 14), 0x8a7a68); fx.shake(0.7); }
-    if (audio) audio.boom(0.55);
+    if (audio) audio.collapse(0.55);
   }
   touching(x, z, r) {
     const out = [];

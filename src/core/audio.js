@@ -1,4 +1,6 @@
-// All sound is synthesized with the Web Audio API — no audio files.
+// Sound effects and voices are generated clips (public/audio); every effect also has a synthesized
+// fallback, and the score is fully synthesized.
+const SAMPLES = ['roar_godzilla', 'roar_godzilla_short', 'roar_rodan', 'roar_kong', 'roar_mecha', 'roar_ghidorah', 'impact_heavy', 'impact_claw', 'footstep', 'beam_charge', 'beam_fire', 'explosion', 'collapse', 'gun', 'plane', 'boat', 'splash', 'mine', 'whoosh', 'crowd', 'block'];
 const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
 // Step-sequenced score. drum: 16 steps/bar ('x' hit, 'o' soft). bass: 8 notes/bar (MIDI, 0 = rest).
@@ -34,7 +36,39 @@ export class AudioSys {
     for (let i = 0; i < 256; i++) { const x = i / 128 - 1; curve[i] = Math.tanh(x * 4); }
     this.curve = curve;
     setInterval(() => this.tick(), 80);
+    this.buf = {}; this.loops = {}; this.vo = {}; this.voBuf = {};
+    this.voice = c.createGain(); this.voice.gain.value = 1.15; this.voice.connect(this.master);
+    fetch('/audio/vo/manifest.json').then((r) => (r.ok ? r.json() : {})).then((m) => { this.vo = m; }).catch(() => {});
+    for (const n of SAMPLES) fetch(`/audio/sfx/${n}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject())).then((b) => c.decodeAudioData(b)).then((b) => { this.buf[n] = b; }).catch(() => {});
   }
+
+  // Play a loaded clip; returns false when it is not available so the caller can synthesize instead.
+  play(name, vol = 1, rate = 1, o = {}) {
+    if (!this.ok || !this.buf || !this.buf[name]) return false;
+    const c = this.ctx, s = c.createBufferSource(), g = c.createGain(), t = c.currentTime;
+    s.buffer = this.buf[name]; s.playbackRate.value = rate * (o.jitter ? 1 + (Math.random() - 0.5) * o.jitter : 1); s.loop = !!o.loop;
+    g.gain.setValueAtTime(vol, t);
+    if (o.dur) { g.gain.setValueAtTime(vol, t + Math.max(0.01, o.dur - 0.25)); g.gain.linearRampToValueAtTime(0.0001, t + o.dur); s.stop(t + o.dur + 0.05); }
+    s.connect(g); g.connect(o.out || this.sfx); s.start(t);
+    return { s, g };
+  }
+  // Speak a recorded dialogue line if one exists for this speaker and text. Returns its length in seconds (0 if none).
+  say(who, text) {
+    const v = this.vo && this.vo[who + '|' + text];
+    if (!this.ok || !v) return 0;
+    const go = (b) => { const s = this.ctx.createBufferSource(); s.buffer = b; s.connect(this.voice); s.start(); const t = this.ctx.currentTime; this.mus.gain.setTargetAtTime(0.28, t, 0.1); this.mus.gain.setTargetAtTime(0.5, t + b.duration, 0.4); };
+    if (this.voBuf[v.f]) go(this.voBuf[v.f]);
+    else fetch('/audio/vo/' + v.f).then((r) => r.arrayBuffer()).then((b) => this.ctx.decodeAudioData(b)).then((b) => { this.voBuf[v.f] = b; go(b); }).catch(() => {});
+    return v.d;
+  }
+  // Start or stop a named looping bed (crowd, boat).
+  loop(name, vol = 0.5) {
+    if (!this.ok) return;
+    if (vol <= 0) { const l = this.loops[name]; if (l) { l.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3); setTimeout(() => { try { l.s.stop(); } catch { /* already stopped */ } }, 1200); delete this.loops[name]; } return; }
+    if (this.loops[name]) { this.loops[name].g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.3); return; }
+    const l = this.play(name, 0.0001, 1, { loop: true }); if (l) { l.g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.4); this.loops[name] = l; }
+  }
+  stopLoops() { for (const n of Object.keys(this.loops || {})) this.loop(n, 0); }
 
   get ok() { return this.ctx && !this.dead; }
   setMuted(m) { this.muted = m; if (this.ok) this.master.gain.value = m ? 0 : 0.9; }
@@ -58,30 +92,36 @@ export class AudioSys {
 
   // --- effects ---
   click() { this.tone('square', 660, 440, 0.06, 0.08); }
-  gun() { this.noise(0.09, 0.35, 3200, 600, 'bandpass'); this.tone('square', 190, 70, 0.07, 0.18); }
+  gun() { if (this.play('gun', 0.5, 1, { jitter: 0.12 })) return; this.noise(0.09, 0.35, 3200, 600, 'bandpass'); this.tone('square', 190, 70, 0.07, 0.18); }
   hit(v = 1) { this.noise(0.22, 0.5 * v, 900, 90); this.tone('sine', 140, 40, 0.25, 0.6 * v); }
-  step(v = 1) { this.tone('sine', 70, 28, 0.45, 0.8 * v); this.noise(0.35, 0.3 * v, 300, 40); }
+  step(v = 1) { if (this.play('footstep', Math.min(1, v * 1.6), 1, { jitter: 0.15 })) return; this.tone('sine', 70, 28, 0.45, 0.8 * v); this.noise(0.35, 0.3 * v, 300, 40); }
   boom(size = 1) {
+    if (this.play('explosion', Math.min(1, 0.45 * size + 0.15), 1.25 - Math.min(0.4, size * 0.15), { jitter: 0.1 })) return;
     const d = 0.8 + size * 0.9;
     this.noise(d, Math.min(1, 0.6 * size), 1400, 30); this.tone('sine', 95, 22, d, Math.min(1, 0.9 * size));
     this.noise(0.12, 0.4 * size, 5000, 800, 'highpass');
   }
   // A blow landing: body thud, low boom and a sharp crack, scaled by power 1..4.
+  collapse(v = 0.6) { if (!this.play('collapse', v, 1, { jitter: 0.2 })) this.boom(0.55); }
   impact(power = 1) {
+    if (this.play(power >= 2.5 ? 'impact_heavy' : 'impact_claw', Math.min(1, 0.5 + power * 0.15), 1, { jitter: 0.14 })) { if (power >= 2.5) this.tone('sine', 70, 22, 0.7, 0.6); return; }
     const v = Math.min(1, 0.45 + power * 0.18);
     this.tone('sine', 150, 34, 0.3 + power * 0.06, v); this.noise(0.25, v * 0.6, 1200, 80);
     this.noise(0.07, v * 0.55, 6000, 1800, 'highpass'); this.tone('triangle', 420, 90, 0.12, v * 0.35);
     if (power >= 2.5) this.tone('sine', 70, 22, 0.8, 0.8);
   }
-  block() { this.tone('triangle', 900, 420, 0.12, 0.3); this.noise(0.08, 0.3, 5000, 2500, 'bandpass', 0, 4); }
-  splash(v = 1) { this.noise(0.7, 0.35 * v, 2600, 500, 'bandpass', 0, 0.5); }
+  block() { if (this.play('block', 0.7, 1, { jitter: 0.1 })) return; this.tone('triangle', 900, 420, 0.12, 0.3); this.noise(0.08, 0.3, 5000, 2500, 'bandpass', 0, 4); }
+  splash(v = 1) { if (this.play('splash', Math.min(1, v * 0.5), 1, { jitter: 0.2 })) return; this.noise(0.7, 0.35 * v, 2600, 500, 'bandpass', 0, 0.5); }
   heartbeat() { this.tone('sine', 62, 38, 0.18, 0.9); this.tone('sine', 55, 34, 0.2, 0.7, 0.24); }
   alarm() { this.tone('square', 880, 880, 0.12, 0.1); this.tone('square', 660, 660, 0.12, 0.1, 0.16); }
-  whoosh(v = 1) { this.noise(0.5, 0.35 * v, 400, 2400, 'bandpass', 0, 1.5); }
+  whoosh(v = 1) { if (this.play('whoosh', Math.min(1, v * 0.6), 1, { jitter: 0.25 })) return; this.noise(0.5, 0.35 * v, 400, 2400, 'bandpass', 0, 1.5); }
 
   // The big one: detuned saws swept up then down, amplitude-growled and overdriven.
-  roar(vol = 1, pitch = 1, dur = 2.1) {
+  // who: 'rodan' | 'kong' | 'mecha' | 'ghidorah'; omitted = Godzilla.
+  roar(vol = 1, pitch = 1, dur = 2.1, who) {
     if (!this.ok) return;
+    const clip = who ? 'roar_' + who : dur < 1.5 ? 'roar_godzilla_short' : 'roar_godzilla';
+    if (this.play(clip, Math.min(1, vol), who ? 1 : Math.pow(pitch, 0.3))) return;
     const c = this.ctx, t = c.currentTime, g = c.createGain(), sh = c.createWaveShaper(), bp = c.createBiquadFilter();
     sh.curve = this.curve; bp.type = 'bandpass'; bp.frequency.value = 780 * pitch; bp.Q.value = 0.9;
     const lfo = c.createOscillator(), lg = c.createGain(), am = c.createGain();
@@ -102,8 +142,8 @@ export class AudioSys {
     this.noise(dur, 0.2 * vol, 1800 * pitch, 400, 'bandpass', 0, 0.6);
     this.tone('sawtooth', 70 * pitch, 40, dur, 0.3 * vol);
   }
-  charge(dur = 2) { this.tone('sawtooth', 90, 900, dur, 0.16); this.tone('sine', 300, 2400, dur, 0.12); this.noise(dur, 0.12, 400, 6000, 'bandpass', 0, 3); }
-  beam(dur = 1.2) { this.noise(dur, 0.7, 5200, 900, 'bandpass', 0, 0.4); this.tone('sawtooth', 1400, 180, dur, 0.22); this.tone('sine', 60, 30, dur, 0.8); }
+  charge(dur = 2) { if (this.play('beam_charge', 0.6, 2.4 / Math.max(0.8, dur), { dur })) return; this.tone('sawtooth', 90, 900, dur, 0.16); this.tone('sine', 300, 2400, dur, 0.12); this.noise(dur, 0.12, 400, 6000, 'bandpass', 0, 3); }
+  beam(dur = 1.2) { if (this.play('beam_fire', 0.8, 1, { dur })) { this.tone('sine', 60, 30, dur, 0.6); return; } this.noise(dur, 0.7, 5200, 900, 'bandpass', 0, 0.4); this.tone('sawtooth', 1400, 180, dur, 0.22); this.tone('sine', 60, 30, dur, 0.8); }
   zap(dur = 0.6) { this.tone('sawtooth', 1800, 300, dur, 0.18); this.noise(dur, 0.3, 6000, 2000, 'highpass'); }
 
   // Continuous engine drone (planes, boats).
@@ -111,6 +151,8 @@ export class AudioSys {
     if (!this.ok) return;
     if (!on) { if (this.eng) { const e = this.eng; e.g.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2); setTimeout(() => { e.o.stop(); e.o2.stop(); }, 900); this.eng = null; } return; }
     if (this.eng) return;
+    const sample = this.play(type === 'boat' ? 'boat' : 'plane', 0.0001, 1, { loop: true });
+    if (sample) { this.eng = { sample, o: { stop() { try { sample.s.stop(); } catch { /* stopped */ } } }, o2: { stop() {} }, g: sample.g, f: null }; return; }
     const c = this.ctx, o = c.createOscillator(), o2 = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
     o.type = type; o2.type = 'square'; o.frequency.value = 80; o2.frequency.value = 40.5; f.type = 'lowpass'; f.frequency.value = 500; g.gain.value = 0;
     o.connect(f); o2.connect(f); f.connect(g); g.connect(this.sfx); o.start(); o2.start();
@@ -119,6 +161,7 @@ export class AudioSys {
   engineSet(pitch, vol) {
     if (!this.eng) return;
     const t = this.ctx.currentTime;
+    if (this.eng.sample) { this.eng.sample.s.playbackRate.setTargetAtTime(0.85 + (pitch - 0.9) * 0.6, t, 0.15); this.eng.g.gain.setTargetAtTime(vol * 2.2, t, 0.15); return; }
     this.eng.o.frequency.setTargetAtTime(80 * pitch, t, 0.1); this.eng.o2.frequency.setTargetAtTime(40.5 * pitch, t, 0.1);
     this.eng.f.frequency.setTargetAtTime(400 + 500 * pitch, t, 0.1); this.eng.g.gain.setTargetAtTime(vol, t, 0.15);
   }

@@ -18,7 +18,8 @@ export class GameScene {
     this.pipeline.outputNode = game.lite ? colour : colour.add(this.bloom);
   }
   after(sec, fn) { this.timers.push({ t: this.t + sec, fn }); }
-  say(who, text, dur) { this.ui.subtitle(who, text, dur); }
+  // Subtitle plus the recorded line when there is one (the subtitle stays up at least as long as the voice).
+  say(who, text, dur) { const spoken = who ? this.audio.say(who, text) : 0; this.ui.subtitle(who, text, Math.max(dur || 3.6, spoken ? spoken + 0.6 : 0)); }
   tick(dt) {
     this.t += dt;
     for (let i = this.timers.length - 1; i >= 0; i--) if (this.timers[i].t <= this.t) this.timers.splice(i, 1)[0].fn();
@@ -36,7 +37,7 @@ export class GameScene {
   render() { this.pipeline.render(); }
   dispose() {
     this.pipeline.dispose();
-    this.audio.engine(false);
+    this.audio.engine(false); this.audio.stopLoops();
     this.input.tapFire = false;
     if (this.city && this.city.dispose) this.city.dispose();
     if (this.crowd && this.crowd.dispose) this.crowd.dispose();

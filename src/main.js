@@ -94,7 +94,7 @@ class Game {
     const q = new URLSearchParams(location.search), sc = q.get('scene');
     if (sc === 'glb') return this.swap(() => new GlbView(this, q));
     if (sc === 'view') return this.swap(() => new ViewerScene(this, q), null, () => need(q.get('m')));
-    if (sc === 'brawl') return this.startBrawl(q.get('rival') || 'rodan', false, q.get('arena'));
+    if (sc === 'brawl') { this.botSkill = q.has('bot') ? +(q.get('bot') || 0.75) : 0; return this.startBrawl(q.get('rival') || 'rodan', false, q.get('arena')); }
     const i = CHAPTERS.findIndex((c) => c.id === sc);
     if (i >= 0) return this.startChapter(i, { skipIntro: true, checkpoint: +(q.get('cp') || 0) });
     this.toMenu();
@@ -217,7 +217,7 @@ class Game {
   // ---------- brawl ----------
   async startBrawl(rival, ladder = false, arena = null, hp) {
     this.mode = 'brawl'; this.ladder = ladder;
-    await this.swap(() => new BrawlScene(this, { rival, arena: arena || undefined, hp, diff: ladder ? LADDER.indexOf(rival) : undefined }), null, () => need(rival));
+    await this.swap(() => new BrawlScene(this, { rival, arena: arena || undefined, hp, diff: ladder ? LADDER.indexOf(rival) : undefined, bot: this.botSkill || 0 }), null, () => need(rival));
   }
   brawlOver(scene, won) {
     const k = scene.key, name = RIVALS[k].name, i = LADDER.indexOf(k);

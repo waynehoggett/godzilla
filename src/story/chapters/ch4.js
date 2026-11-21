@@ -39,7 +39,7 @@ export class Ch4 extends StoryScene {
     this.beacon = beacon(s, 5, NORIKO_Z, 0xffe9a0, 30, 1.2);
     this.tram = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.8, 15), new THREE.MeshStandardMaterial({ color: 0x4a5a3a, roughness: 0.8 })); this.tram.visible = false; s.add(this.tram);
     this.hazT = 2.5; this.hazards = [];
-    this.audio.music('battle');
+    this.audio.music('battle'); this.audio.loop('crowd', 0.35);
     this.ui.controls([{ b: 'd', label: 'Sprint', key: 'Shift' }]);
     if (this.cp >= 1) { this.w.pos.set(3, 0, NORIKO_Z - 3); this.tramDone = this.sweepDone = true; this.startFlee(); }
     else {
@@ -69,7 +69,7 @@ export class Ch4 extends StoryScene {
   }
 
   blast() {
-    this.go('blast'); this.ui.objective(''); this.ui.meter(null); this.beacon.visible = false;
+    this.go('blast'); this.ui.objective(''); this.audio.loop('crowd', 0); this.ui.meter(null); this.beacon.visible = false;
     const safe = this.w.pos.z < SAFE_Z;
     this.audio.beam(1.5);
     this.after(1.5, () => {

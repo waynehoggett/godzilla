@@ -20,7 +20,7 @@ export class Ch2 extends StoryScene {
     this.mines = []; this.cleared = 0; this.total = WAVES.reduce((a, b) => a + b, 0); this.wave = 0; this.fish = [];
     this.ui.objective('Shoot the mines before they reach the boat');
     this.ui.controls([{ b: 'a', label: 'Fire', key: 'Space / Click' }], 'Aim (or mouse)');
-    this.audio.music('menu');
+    this.audio.music('menu'); this.audio.engine(true, 'boat'); this.audio.engineSet(0.9, 0.12);
     this.go('sweep');
     this.after(1.2, () => this.say('Akitsu', 'Shikishima, you\'re on the gun. The cable\'s cut — pop them as they come up!', 5));
     this.after(3.5, () => this.spawnWave());

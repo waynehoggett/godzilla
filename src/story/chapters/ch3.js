@@ -28,7 +28,7 @@ export class Ch3 extends StoryScene {
     this.takao = makeWarship(125); this.takao.root.visible = false; this.scene.add(this.takao.root);
     this.beam = new Beam(this.scene);
     this.camera.position.set(0, 6, -9.5); this.camera.rotation.set(-0.04, 0, 0);
-    this.audio.music('battle');
+    this.audio.music('battle'); this.audio.engine(true, 'boat'); this.audio.engineSet(1.25, 0.16);
     this.setControls(false);
     if (this.cp >= 1) { this.gp.z = -170; this.go('hold2'); this.ui.objective('Hold him off'); }
     else {
