@@ -1,0 +1,32 @@
+import * as THREE from 'three';
+import { GameScene } from './core/scene.js';
+import { setupSky, ground } from './world/sky.js';
+import { makeGodzilla } from './models/godzilla.js';
+import { makeRodan, makeMothra, makeGhidorah } from './models/rivals.js';
+import * as VEH from './models/vehicles.js';
+import * as PPL from './models/people.js';
+
+// Dev tool: /?scene=view&m=godzilla&a=0.8  — look at one model on a turntable.
+const MAKERS = {
+  godzilla: () => makeGodzilla(), mecha: () => makeGodzilla({ mecha: true }), rodan: makeRodan, mothra: makeMothra, ghidorah: makeGhidorah,
+  zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
+  mine: () => ({ root: VEH.makeMine() }), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko,
+};
+export class ViewerScene extends GameScene {
+  constructor(game, q) {
+    super(game);
+    this.sky = setupSky(this.scene, 'day');
+    ground(this.scene, 0x6a6f66, 400);
+    this.m = MAKERS[q.get('m') || 'godzilla']();
+    this.scene.add(this.m.root);
+    this.a = +(q.get('a') || 0.7); this.dist = +(q.get('d') || 22); this.h = +(q.get('h') || 6);
+    if (this.m.set) Object.assign(this.m.set, JSON.parse(q.get('set') || '{}'));
+    this.spin = q.has('spin');
+  }
+  update(dt) {
+    if (this.spin) this.a += dt * 0.5;
+    this.camera.position.set(Math.sin(this.a) * this.dist, this.h + this.dist * 0.15, Math.cos(this.a) * this.dist);
+    this.camera.lookAt(0, this.h, 0);
+    if (this.m.update) this.m.update(dt, 4);
+  }
+}
