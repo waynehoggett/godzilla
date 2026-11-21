@@ -114,12 +114,29 @@ function dropIn(slot, length, groundY = null) {
   return g;
 }
 
+function zeroGear(f, doorMat, y) {
+  for (const s of [1, -1]) {
+    const leg = group(f, 1.75 * s, y, 0.95); leg.rotation.x = 0.19;
+    mesh(leg, at(cyl(0.05, 0.05, 1.2, 10), 0, -0.6, 0), steel(0x8a8f92, 0.35));
+    mesh(leg, at(new THREE.BoxGeometry(0.04, 0.9, 0.5), 0.08 * s, -0.55, 0), doorMat);
+    mesh(leg, at(new THREE.TorusGeometry(0.27, 0.13, 12, 24).rotateY(Math.PI / 2), 0, -1.22, 0), matte(0x101112, 0.9));
+    mesh(leg, at(cyl(0.14, 0.14, 0.14, 16).rotateZ(Math.PI / 2), 0, -1.22, 0), steel(0x7a7f82, 0.4));
+  }
+  mesh(f, at(new THREE.TorusGeometry(0.1, 0.05, 8, 16).rotateY(Math.PI / 2), 0, y - 0.15, -4.2), matte(0x101112)); // tail wheel
+}
+
 // ---------- Mitsubishi A6M Zero: ~9 long, nose toward +Z, wheels on y=0 ----------
 export function makeZero() {
   const g = new THREE.Group(), f = group(g, 0, 1.75, 0);
   f.rotation.x = -0.19; // tail-dragger stance
   const drop = dropIn('zero', 9.1);
-  if (drop) { f.add(drop); return { root: g, prop: new THREE.Group(), body: f }; }
+  if (drop) {
+    // the sourced model is in flying trim, so it gets landing gear for the airstrip and a spinning prop disc
+    f.add(drop); zeroGear(f, matte(0x8f948c, 0.6), -0.55);
+    const prop = group(f, 0, 0, 4.5);
+    prop.add(new THREE.Mesh(new THREE.CircleGeometry(1.5, 40), new THREE.MeshBasicMaterial({ color: 0x15171a, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false })));
+    return { root: g, prop, body: f };
+  }
   const green = paint({ top: 0x2c4630, under: 0xa9ada6, cowlZ: 2.42, wingMarks: [{ x: 3.9, z: 0.7, r: 0.62 }], sideMarks: [{ y: 0.05, z: -1.75, r: 0.4 }] });
   const parts = [
     hull([[-4.7, 0.04, 0.07, 0.2], [-4.0, 0.2, 0.3, 0.14], [-2.4, 0.42, 0.54, 0.06], [-0.7, 0.56, 0.68, 0], [0.9, 0.62, 0.7, 0], [2.25, 0.65, 0.68, 0], [2.45, 0.74, 0.74, 0], [3.55, 0.73, 0.73, 0], [3.95, 0.56, 0.56, 0], [4.02, 0.3, 0.3, 0]]),
@@ -133,15 +150,9 @@ export function makeZero() {
   for (const s of [1, -1]) {
     mesh(f, at(zcyl(0.035, 0.035, 0.9, 8), 1.95 * s, -0.27, 2.1), dark);                         // 20mm cannon
     for (let i = 0; i < 3; i++) mesh(f, at(zcyl(0.05, 0.06, 0.3, 8), 0.72 * s, -0.25 - i * 0.14, 2.35), steel(0x3a2a22, 0.7)); // exhaust stubs
-    // landing gear
-    const leg = group(f, 1.75 * s, -0.4, 0.95); leg.rotation.x = 0.19;
-    mesh(leg, at(cyl(0.05, 0.05, 1.2, 10), 0, -0.6, 0), steel(0x8a8f92, 0.35));
-    mesh(leg, at(new THREE.BoxGeometry(0.04, 0.9, 0.5), 0.08 * s, -0.55, 0), green);
-    mesh(leg, at(new THREE.TorusGeometry(0.27, 0.13, 12, 24).rotateY(Math.PI / 2), 0, -1.22, 0), matte(0x101112, 0.9));
-    mesh(leg, at(cyl(0.14, 0.14, 0.14, 16).rotateZ(Math.PI / 2), 0, -1.22, 0), steel(0x7a7f82, 0.4));
   }
+  zeroGear(f, green, -0.4);
   mesh(f, at(cyl(0.02, 0.02, 0.7, 6), 0, 1.35, -1.0), dark);                                    // aerial mast
-  mesh(f, at(new THREE.TorusGeometry(0.1, 0.05, 8, 16).rotateY(Math.PI / 2), 0, -0.55, -4.2), matte(0x101112)); // tail wheel
   const prop = propeller(f, 4.08, 1.52, 3);
   return { root: g, prop, body: f };
 }

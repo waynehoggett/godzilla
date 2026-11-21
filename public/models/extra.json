@@ -1,1 +1,6 @@
-{}
+{
+  "zero": { "file": "zero.glb", "yaw": 180 },
+  "shinden": { "file": "shinden.glb", "yaw": 0 },
+  "gun": { "file": "gun.glb", "yaw": 0 },
+  "destroyer": { "file": "destroyer.glb", "yaw": -90 }
+}

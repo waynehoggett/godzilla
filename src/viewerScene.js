@@ -10,7 +10,7 @@ import * as PPL from './models/people.js';
 const MAKERS = {
   godzilla: () => makeGodzilla(), mecha: makeMecha, kong: makeKong, rodan: makeRodan, ghidorah: makeGhidorah,
   zero: VEH.makeZero, shinden: VEH.makeShinden, shinsei: VEH.makeShinsei, warship: () => VEH.makeWarship(60), tug: VEH.makeTug,
-  mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), koichi: PPL.makeKoichi, noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
+  mine: () => ({ root: VEH.makeMine() }), gun: () => ({ root: VEH.makeGun() }), balloon: () => ({ root: VEH.makeBalloon(3) }), chute: VEH.makeParachute, cruiser: () => VEH.makeWarship(125), koichi: () => PPL.makeKoichi('pilot'), civil: () => PPL.makeKoichi('civil'), noriko: PPL.makeNoriko, soldier: PPL.makeSoldier,
 };
 export class ViewerScene extends GameScene {
   constructor(game, q) {

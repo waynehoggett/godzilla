@@ -35,7 +35,7 @@ export class Ch4 extends StoryScene {
     this.crowd = new Crowd(s, 34);
     for (const p of this.crowd.members) { p.speed = 7 + Math.random() * 3; p.x = (Math.random() - 0.5) * 18; p.z = 20 + Math.random() * 100; p.yaw = Math.PI; }
     this.noriko = makeNoriko(); this.noriko.root.position.set(5, 0, NORIKO_Z); this.noriko.root.rotation.y = Math.PI; s.add(this.noriko.root); this.nSpeed = 0;
-    this.w = new Walker(s, makeKoichi(), 0, 0);
+    this.w = new Walker(s, makeKoichi('civil'), 0, 0);
     this.beacon = beacon(s, 5, NORIKO_Z, 0xffe9a0, 30, 1.2);
     this.tram = new THREE.Mesh(new THREE.BoxGeometry(3.6, 3.8, 15), new THREE.MeshStandardMaterial({ color: 0x4a5a3a, roughness: 0.8 })); this.tram.visible = false; s.add(this.tram);
     this.hazT = 2.5; this.hazards = [];

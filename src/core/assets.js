@@ -4,7 +4,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 // Rigged models, loaded once at start-up. See CREDITS.md for authors and licences.
 // loaded at start-up
-const FILES = { godzilla21: '/models/godzilla21.glb', soldier: '/models/soldier.glb', michelle: '/models/michelle.glb' };
+const FILES = { godzilla21: '/models/godzilla21.glb', soldier: '/models/soldier.glb' };
 // loaded when first needed (the rivals)
 const LAZY = { kong: '/models/king_kong.glb', ghidorah: '/models/ghidorah.glb', mecha: '/models/mecha.glb', rodan: '/models/rodan.glb' };
 export const assets = {};
