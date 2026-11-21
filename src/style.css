@@ -112,7 +112,7 @@ body.touch #hint { display: none; }
 @keyframes cardin { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 #screen {
-  position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
   background: radial-gradient(ellipse at 50% 40%, rgba(5,7,10,.35), rgba(5,7,10,.88) 75%); padding: 18px; overflow-y: auto;
 }
 #screen h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 8vw, 84px); letter-spacing: .16em; margin: 0; text-align: center; text-shadow: 0 0 30px rgba(77,184,255,.35), 0 3px 8px #000; line-height: 1.05; }
@@ -144,3 +144,14 @@ body.touch #hint { display: none; }
 #loading { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #000; font-family: var(--serif); letter-spacing: .4em; text-transform: uppercase; font-size: 14px; color: var(--dim); }
 #loading div { width: min(60vw, 320px); height: 3px; background: rgba(236,230,216,.15); }
 #loading i { display: block; height: 100%; width: 0; background: var(--blue); box-shadow: 0 0 10px var(--blue); transition: width .2s; }
+
+/* centre the menu when it fits, scroll from the top when it does not (plain centring would clip the title) */
+#screen > :first-child { margin-top: auto; }
+#screen > :last-child { margin-bottom: auto; }
+@media (max-height: 760px) {
+  #screen h1 { font-size: clamp(26px, 9vh, 60px); }
+  #screen .sub { margin: 8px 0 14px; }
+  #screen button { padding: 9px 16px; }
+  #screen .items { gap: 7px; }
+  #screen .foot { margin-top: 14px; }
+}
