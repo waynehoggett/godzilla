@@ -1,5 +1,5 @@
 import * as THREE from 'three/webgpu';
-import { uv, vec3, float, smoothstep, mix, mx_noise_float, instancedDynamicBufferAttribute } from 'three/tsl';
+import { uv, vec3, float, smoothstep, mix, uniform, mx_noise_float, instancedDynamicBufferAttribute } from 'three/tsl';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _c = new THREE.Color();
 const _up = new THREE.Vector3(0, 1, 0), _d = new THREE.Vector3();
@@ -55,7 +55,8 @@ class Pool {
       m.opacityNode = body.mul(body).mul(col.a);
     } else {
       const fine = mx_noise_float(vec3(c.mul(4.2).add(seed.mul(31)), age.mul(2.2)));
-      m.colorNode = col.rgb.mul(c.y.mul(0.16).add(0.9).add(fine.mul(0.14))); // lighter on top, mottled
+      this.ambient = uniform(1); // smoke and spray are unlit, so the scene tells them how bright the light is
+      m.colorNode = col.rgb.mul(this.ambient).mul(c.y.mul(0.16).add(0.9).add(fine.mul(0.14))); // lighter on top, mottled
       m.opacityNode = body.mul(col.a).mul(fine.mul(0.2).add(0.85));
     }
     this.mesh = new THREE.Sprite(m); this.mesh.count = cap; this.mesh.frustumCulled = false; this.mesh.renderOrder = additive ? 5 : 4;
@@ -177,6 +178,10 @@ export class FX {
   // Water thrown up: a white column, hanging mist, droplets and a ring spreading on the surface.
   splash(pos, s = 1) {
     const K = this.smoke;
+    if (K.live > 200) { // already a lot of water in the air (a wading monster): a lighter splash keeps the screen readable
+      for (let i = 0; i < 3; i++) { _d.set(rnd(-3, 3) * s, rnd(9, 18) * s, rnd(-3, 3) * s); K.emit({ pos, vel: _d, life: rnd(0.8, 1.3), size: rnd(1.6, 2.6) * s, grow: 1.0, grav: 24 * s, drag: 0.4, c0: 0xf6fbff, c1: 0xbdd6e2, a: 0.85, fadeIn: 0.05, fadeOut: 0.45 }); }
+      return;
+    }
     for (let i = 0; i < 9; i++) { _d.set(rnd(-3, 3) * s, rnd(9, 20) * s, rnd(-3, 3) * s); _s.copy(pos); _s.x += rnd(-1, 1) * s; _s.z += rnd(-1, 1) * s; K.emit({ pos: _s, vel: _d, life: rnd(0.9, 1.5), size: rnd(1.6, 2.6) * s, grow: 1.0, grav: 24 * s, drag: 0.4, c0: 0xf6fbff, c1: 0xbdd6e2, a: 0.9, fadeIn: 0.05, fadeOut: 0.45 }); }
     for (let i = 0; i < 5; i++) { const size = rnd(2.6, 4) * s; _d.set(rnd(-4, 4) * s, rnd(1, 4) * s, rnd(-4, 4) * s); _s.copy(pos); _s.y += size * 0.4; K.emit({ pos: _s, vel: _d, life: rnd(1.4, 2.2), size, grow: 1.4, drag: 1.6, c0: 0xe4eef4, c1: 0xb4c8d2, a: 0.45, fadeIn: 0.15, fadeOut: 0.7 }); }
     for (let i = 0; i < 10; i++) { _d.set(rnd(-9, 9) * s, rnd(8, 22) * s, rnd(-9, 9) * s); K.emit({ pos, vel: _d, life: rnd(0.8, 1.4), size: rnd(0.35, 0.6) * s, grav: 30 * s, c0: 0xffffff, c1: 0xd6e6ee, a: 0.9, fadeOut: 0.3, stretch: 0.08 / s, spin: 0 }); }
@@ -208,6 +213,8 @@ export class FX {
   }
 
   update(dt, cam) {
+    const fog = this.scene.fog;
+    if (fog) { const c = fog.color; this.smoke.ambient.value = Math.min(1, Math.max(0.3, 0.25 + Math.sqrt(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b))); } // night and storm dim them
     this.shakeAmt *= Math.exp(-3.5 * dt);
     this.light.intensity *= Math.exp(-9 * dt);
     this.smoke.update(dt, cam); this.fire.update(dt, cam);
